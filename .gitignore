@@ -1,0 +1,21 @@
+# Local scratch material: sample photos, models and experiments. Never commit.
+local_research/
+
+# Third-party models are imported at runtime into ~/.PaperScan/models.
+*.tflite
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.idea/
+.vscode/
+*.pdf
+
+# Owner notes (verbatim requirements, personal context). Never commit.
+docs/*.local.md

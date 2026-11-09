@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paperscan"
+dynamic = ["version"]
+description = "Turn phone photos of documents into clean, searchable, well-named PDFs - GUI and CLI."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "bjspi" }]
+dependencies = [
+  "PySide6>=6.7",          # GUI
+  "opencv-python>=4.9",    # page detection, perspective correction, filters
+  "numpy>=1.26",
+  "pillow>=10.3",          # photo loading with EXIF orientation, JPEG fallback encoder
+  "pymupdf>=1.24",         # PDF assembly with invisible OCR text layer
+  "rich-click>=1.8",       # CLI
+]
+
+[project.optional-dependencies]
+# Neural page border detection (TFLite runtime).
+ml = ["ai-edge-litert>=1.2"]
+# OpenAI API backend for document analysis (the Claude/Codex backends need no Python package).
+openai = ["openai>=1.40"]
+# iPhone HEIC photos.
+heic = ["pillow-heif>=0.16"]
+all = ["paperscan[ml,openai,heic]"]
+dev = ["pytest>=8", "pytest-xdist>=3.5", "ruff>=0.8", "mypy>=1.13"]
+
+[project.scripts]
+paperscan = "paperscan.cli.main:main"
+
+[project.gui-scripts]
+paperscanw = "paperscan.cli.main:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "paperscan.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+paperscan = ["gui/resources/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "D", "ANN", "B", "UP", "SIM", "PL", "RUF", "S", "BLE", "N"]
+ignore = ["D203", "D213", "D413", "PLR0913", "PLR2004", "S101", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "ANN", "PLR2004", "S"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
