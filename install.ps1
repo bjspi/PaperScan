@@ -178,8 +178,20 @@ param(
     }
 
 
+    function Get-UvPython {
+        # Path of a Python 3.13 managed by uv (downloaded if needed); nothing if uv cannot provide one.
+        $ErrorActionPreference = 'Continue'
+        $path = uv python find --system 3.13 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            uv python install 3.13 2>&1 | Out-Host
+            $path = uv python find --system 3.13 2>$null
+        }
+        if ($LASTEXITCODE -eq 0 -and $path) { return "$path".Trim() }
+    }
+
+
     function New-Environment {
-        # Create .venv unless a usable one exists; returns whether uv created it.
+        # Create .venv unless a usable one exists; returns whether uv provided the Python (uv then installs packages too).
         param([string]$Venv, [string]$VenvPython)
         if (Test-Path $VenvPython) {
             $version = Get-PythonVersion $VenvPython
@@ -197,10 +209,15 @@ param(
             return $false
         }
         if ($uvInstalled) {
-            Write-Host '==> Creating the virtual environment (Python 3.13, with uv)'
-            uv venv --seed --python 3.13 $Venv
-            if ($LASTEXITCODE -eq 0) { return $true }
-            Write-Host 'uv could not create it (no download allowed?). Looking for a Python instead.' -ForegroundColor Yellow
+            # uv only provides the interpreter: "uv venv" gives pythonw.exe the console launcher,
+            # which opens a black window next to the GUI. Python's own venv module copies the right one.
+            $uvPython = Get-UvPython
+            if ($uvPython) {
+                Write-Host "==> Creating the virtual environment with $uvPython"
+                New-Venv $Venv $uvPython
+                return $true
+            }
+            Write-Host 'uv could not provide Python 3.13 (no download allowed?). Looking for a Python instead.' -ForegroundColor Yellow
         }
         Write-Host '==> Creating the virtual environment'
         if (New-VenvWithFoundPython $Venv) { return $false }

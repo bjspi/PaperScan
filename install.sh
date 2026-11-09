@@ -71,9 +71,14 @@ create_environment() {
     return
   fi
   if command -v uv >/dev/null; then
-    echo "==> Creating the virtual environment (Python 3.13, with uv)"
-    uv venv --seed --python 3.13 .venv && return
-    echo "uv could not create it. Looking for a Python instead." >&2
+    # uv only provides the interpreter; the venv module creates the environment (same as on Windows).
+    local uv_python
+    uv_python="$(uv python find --system 3.13 2>/dev/null || { uv python install 3.13 >&2 && uv python find --system 3.13; } || true)"
+    if [ -n "$uv_python" ]; then
+      echo "==> Creating the virtual environment with $uv_python"
+      "$uv_python" -m venv .venv && return
+    fi
+    echo "uv could not provide Python 3.13. Looking for a Python instead." >&2
   fi
   local python
   python="$(find_python)"
