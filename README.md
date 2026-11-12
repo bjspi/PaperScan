@@ -58,8 +58,8 @@ document itself. No scanner app, no cloud scanner service, no copying files arou
 
 - 📱 **Phone, files or folders** — the newest camera photos over USB (ADB) with thumbnails, or over
   Wi-Fi (Wireless debugging) when no cable is plugged in; single files, whole folders or drag & drop. Several photos form one document; one photo works too.
-- 🗂️ **Several documents in one go** — import a whole stack, right-click a page to start the next
-  document there (or split where photos were taken minutes apart), and save all PDFs from one dialog.
+- 🗂️ **Several documents in one go** — import a whole stack, right-click a page to start a new document
+  with it (or split where photos were taken minutes apart), and save all PDFs from one dialog.
 - 📐 **Finds the page** — neural border detection (optional) refined by OpenCV, perspective
   correction, corners *and* whole edges draggable, with a magnifier for pixel-exact corners.
 - ☀️ **Adaptive cleanup** — paper turns white under sun, shadows and folds because the paper
@@ -152,6 +152,7 @@ Running it again is safe; `git pull` and a rerun update the app.
 
 ```bash
 pipx install "paperscan[all] @ git+https://github.com/bjspi/PaperScan"
+pipx install "paperscan[all] @ git+https://github.com/bjspi/PaperScan@v0.2.2"   # a fixed release
 paperscan setup      # Tesseract (+ languages), cjpegli, adb
 paperscan doctor     # tools, model and connected phone
 ```

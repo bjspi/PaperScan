@@ -182,3 +182,11 @@ points to the log file.
 * `tests/test_gui_settings.py` — the real settings window returns correctly typed settings.
 
 No test needs Tesseract, adb, a model, network or personal data.
+
+## Continuous integration and releases
+
+* `.github/workflows/ci.yml` — ruff, mypy and pytest (Windows, macOS, Linux) on every push to
+  `main` and on pull requests.
+* `.github/workflows/release.yml` — on an annotated tag `vX.Y.Z`: runs the same CI, checks that the
+  tag matches `paperscan.__version__`, builds wheel and sdist and publishes a GitHub release whose
+  notes are the tag message. The version lives only in `src/paperscan/__init__.py`.

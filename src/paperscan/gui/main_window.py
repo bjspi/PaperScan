@@ -446,7 +446,7 @@ class MainWindow(QMainWindow):
         menu.addActions(self._page_toolbar.actions_for_window)
         menu.addSeparator()
         entries = [
-            ("Start a new document here", self._split_document, index > 0 and not self._session.starts_document(index)),
+            ("New document starting with this page", self._split_document, index > 0 and not self._session.starts_document(index)),
             ("Join with the previous document", self._join_document, not in_first_document),
             ("Split at pauses between photos", self._split_at_pauses, len(self._session) > 1),
         ]
@@ -457,7 +457,7 @@ class MainWindow(QMainWindow):
         menu.exec(position)
 
     def _split_document(self) -> None:
-        """Make the current page the first page of a new document."""
+        """Make the current page (and the pages after it in its document) a new document."""
         self._session.split_before(self._current)
         self._documents_changed()
 

@@ -48,7 +48,7 @@ class WorkflowPanel(QGroupBox):
         self._create.setObjectName("create")
         self._create.setToolTip(
             "Process all pages, review title and date, then save the PDF (Ctrl+S).\n"
-            "Right-click a page to start a new document there: each document becomes its own PDF."
+            "Right-click a page to start a new document with it: each document becomes its own PDF."
         )
         self._create.clicked.connect(self.create_requested)
         layout = QVBoxLayout(self)
