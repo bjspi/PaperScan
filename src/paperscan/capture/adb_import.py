@@ -1,7 +1,12 @@
 """Import camera photos from an Android phone over ADB.
 
 Lists the newest images in the phone's camera folder and pulls the selected
-ones into a local import directory. Photos are never deleted on the phone.
+ones into a local import directory. Photos only leave the phone when the user
+explicitly deletes them after an export.
+
+The phone is looked for on USB first. If none is plugged in, the client can
+fall back to Wireless debugging (Android 11+): a configured ``IP:port`` or a
+phone announced on the local network over mDNS (paired with this computer once).
 """
 
 from __future__ import annotations
@@ -32,6 +37,19 @@ MEDIA_STORE_IMAGES = "content://media/external/images/media"
 PHOTO_HEAD_BYTES = 131072
 #: Device state reported by ``adb devices`` for usable devices.
 DEVICE_READY_STATE = "device"
+#: Timeout for connecting or pairing over Wi-Fi, in seconds.
+ADB_WIRELESS_TIMEOUT = 15.0
+#: Port of the classic ``adb tcpip`` mode, used when an address has no port.
+LEGACY_TCPIP_PORT = 5555
+#: mDNS service of phones with Wireless debugging on (paired computers connect to it).
+MDNS_CONNECT_SERVICE = "_adb-tls-connect._tcp"
+#: mDNS service of phones in the classic ``adb tcpip`` mode.
+MDNS_LEGACY_SERVICE = "_adb._tcp"
+#: Replies of ``adb connect`` and ``adb pair`` that mean success (adb also exits with 0 on failure).
+CONNECTED_REPLIES = ("connected to", "already connected to")
+PAIRED_REPLY = "successfully paired"
+NO_PHONE_HINT = "Connect the phone by USB with USB debugging allowed"
+WIRELESS_HINT = "or turn on Wireless debugging and pair this computer once (Settings → Phone)"
 
 
 class AdbError(RuntimeError):
@@ -51,6 +69,16 @@ class Device:
         """Return whether the device accepts commands (authorised and online)."""
         return self.state == DEVICE_READY_STATE
 
+    @property
+    def wireless(self) -> bool:
+        """Return whether adb reaches the device over the network (``IP:port`` or an mDNS name)."""
+        return ":" in self.serial or MDNS_CONNECT_SERVICE in self.serial
+
+    @property
+    def label(self) -> str:
+        """Return a short human-readable name with the connection type."""
+        return f"{self.model or self.serial} ({'Wi-Fi' if self.wireless else 'USB'})"
+
 
 @dataclass(frozen=True)
 class RemotePhoto:
@@ -67,17 +95,54 @@ class RemotePhoto:
 
 
 class AdbClient:
-    """Thin wrapper around the adb executable for one (optional) device serial."""
+    """Thin wrapper around the adb executable, talking to one phone.
 
-    def __init__(self, adb_path: str = "", serial: str = "") -> None:
-        """Resolve adb now so a missing tool is reported before any work starts."""
+    The phone is chosen on the first command that needs it (see :meth:`connect`)
+    and kept for the lifetime of the client.
+    """
+
+    def __init__(self, adb_path: str = "", serial: str = "", *, wireless_fallback: bool = False, wireless_address: str = "") -> None:
+        """Resolve adb now so a missing tool is reported before any work starts.
+
+        Args:
+            adb_path: Configured adb executable; empty finds it automatically.
+            serial: Use exactly this device (only needed with several phones).
+            wireless_fallback: Look for a phone over Wi-Fi when none is on USB.
+            wireless_address: ``IP[:port]`` to connect to over Wi-Fi; empty discovers the phone via mDNS.
+        """
         self._adb = str(require_tool(Tool.ADB, adb_path))
         self._serial = serial
+        self._wireless_fallback = wireless_fallback
+        self._wireless_address = wireless_address.strip()
+        self._device: Device | None = None
 
     def devices(self) -> list[Device]:
         """Return all devices adb knows about."""
-        output = self._run(["devices", "-l"], with_serial=False)
+        output = self._run(["devices", "-l"], with_device=False)
         return [device for line in output.splitlines()[1:] if (device := _parse_device_line(line))]
+
+    def connect(self) -> Device:
+        """Return the phone commands go to, connecting over Wi-Fi if needed.
+
+        Order: the configured serial; else the only ready device, preferring USB;
+        else (with the Wi-Fi fallback) the configured address or a phone found via mDNS.
+        """
+        if self._device is None:
+            self._device = self._find_device()
+            log.info("Using phone %s", self._device.label)
+        return self._device
+
+    def pair(self, address: str, code: str) -> None:
+        """Pair this computer with a phone shown under "Pair device with pairing code" (one-time step)."""
+        output = self._run(["pair", address.strip(), code.strip()], with_device=False, timeout=ADB_WIRELESS_TIMEOUT)
+        if PAIRED_REPLY not in output.lower():
+            raise AdbError(output.strip() or f"Pairing with {address} failed")
+        log.info("Paired with %s", address)
+
+    def wireless_services(self) -> list[str]:
+        """Return the ``IP:port`` addresses of phones that announce adb on the local network."""
+        output = self._run(["mdns", "services"], with_device=False)
+        return [address for line in output.splitlines() if (address := _parse_mdns_line(line))]
 
     def list_photos(self, camera_dir: str = DEFAULT_CAMERA_DIR, limit: int = 50) -> list[RemotePhoto]:
         """Return the newest photos in ``camera_dir``, newest first."""
@@ -130,16 +195,61 @@ class AdbClient:
             return embedded
         return thumbnail_of_file(self.pull(photo, fallback_dir), edge)
 
-    def _command(self, *, with_serial: bool = True) -> list[str]:
-        """Return the adb executable plus the device selection."""
-        if with_serial and self._serial:
-            return [self._adb, "-s", self._serial]
+    # --- Device selection ------------------------------------------------------------------------
+
+    def _find_device(self) -> Device:
+        """Choose the phone as described in :meth:`connect`."""
+        devices = self.devices()
+        if self._serial:
+            return _device_with_serial(devices, self._serial)
+        ready = [device for device in devices if device.ready]
+        usb = [device for device in ready if not device.wireless]
+        if len(usb) > 1 or (not usb and len(ready) > 1):
+            names = ", ".join(device.label for device in ready)
+            raise AdbError(f"Several phones are connected ({names}). Enter the device serial in Settings → Phone.")
+        if ready:
+            return usb[0] if usb else ready[0]
+        if not self._wireless_fallback:
+            raise AdbError(f"No phone found. {NO_PHONE_HINT}.")
+        return self._connect_wireless()
+
+    def _connect_wireless(self) -> Device:
+        """Connect to the configured address, else to the first phone announced over mDNS."""
+        candidates = [_with_port(self._wireless_address)] if self._wireless_address else self.wireless_services()
+        errors: list[str] = []
+        for address in candidates:
+            try:
+                return self._connect_address(address)
+            except AdbError as exc:
+                errors.append(str(exc))
+        details = f" ({'; '.join(errors)})" if errors else ""
+        raise AdbError(f"No phone found over USB or Wi-Fi{details}. {NO_PHONE_HINT}, {WIRELESS_HINT}.")
+
+    def _connect_address(self, address: str) -> Device:
+        """Run ``adb connect`` and return the device it added."""
+        output = self._run(["connect", address], with_device=False, timeout=ADB_WIRELESS_TIMEOUT)
+        if not output.strip().lower().startswith(CONNECTED_REPLIES):
+            raise AdbError(output.strip() or f"Cannot connect to {address}")
+        log.info("Connected to %s over Wi-Fi", address)
+        listed = [device for device in self.devices() if device.serial == address]
+        device = listed[0] if listed else Device(serial=address, state=DEVICE_READY_STATE, model="")
+        if not device.ready:
+            raise AdbError(f"{address} is {device.state}; allow debugging on the phone")
+        return device
+
+    # --- Running adb ----------------------------------------------------------------------------
+
+    def _command(self, *, with_device: bool = True) -> list[str]:
+        """Return the adb executable plus the selection of the phone (chosen on first use)."""
+        if with_device:
+            return [self._adb, "-s", self.connect().serial]
         return [self._adb]
 
-    def _run(self, arguments: list[str], *, with_serial: bool = True, timeout: float = ADB_QUERY_TIMEOUT) -> str:
+    def _run(self, arguments: list[str], *, with_device: bool = True, timeout: float = ADB_QUERY_TIMEOUT) -> str:
         """Run adb and return stdout; wraps failures in :class:`AdbError`."""
+        command = self._command(with_device=with_device)
         try:
-            return run_tool(self._command(with_serial=with_serial) + arguments, timeout=timeout).stdout
+            return run_tool(command + arguments, timeout=timeout).stdout
         except Exception as exc:
             stderr = getattr(exc, "stderr", "") or ""
             raise AdbError(stderr.strip() or str(exc)) from exc
@@ -152,6 +262,30 @@ def _parse_device_line(line: str) -> Device | None:
         return None
     details = dict(part.split(":", 1) for part in parts[2:] if ":" in part)
     return Device(serial=parts[0], state=parts[1], model=details.get("model", "").replace("_", " "))
+
+
+def _device_with_serial(devices: list[Device], serial: str) -> Device:
+    """Return the ready device with ``serial`` or explain why it cannot be used."""
+    for device in devices:
+        if device.serial != serial:
+            continue
+        if not device.ready:
+            raise AdbError(f"Phone {serial} is {device.state}; allow debugging on the phone")
+        return device
+    raise AdbError(f"Phone {serial} is not connected. Clear the device serial in Settings → Phone to use any phone.")
+
+
+def _with_port(address: str) -> str:
+    """Return ``address`` with the classic adb port appended when it has none."""
+    return address if ":" in address else f"{address}:{LEGACY_TCPIP_PORT}"
+
+
+def _parse_mdns_line(line: str) -> str | None:
+    """Parse ``<name> <service> <IP:port>`` from ``adb mdns services``; pairing services are skipped."""
+    parts = line.split()
+    if len(parts) < 3 or parts[1].rstrip(".") not in (MDNS_CONNECT_SERVICE, MDNS_LEGACY_SERVICE):
+        return None
+    return parts[-1]
 
 
 def _parse_stat_line(line: str, camera_dir: str) -> RemotePhoto | None:

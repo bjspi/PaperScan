@@ -22,7 +22,7 @@ from paperscan.tool_setup import INSTALLABLE_TOOLS, SetupMethod, install, instal
 TOOL_TEXTS: dict[Tool, tuple[str, str]] = {
     Tool.TESSERACT: ("Tesseract", "Text recognition for the searchable PDF layer."),
     Tool.CJPEGLI: ("cjpegli", "Small, high-quality JPEGs (jpegli, as in XnConvert)."),
-    Tool.ADB: ("adb", "Imports photos from an Android phone over USB."),
+    Tool.ADB: ("adb", "Imports photos from an Android phone over USB or Wi-Fi."),
     Tool.CLAUDE: ("Claude Code", "Optional AI backend for titles, dates and OCR correction."),
     Tool.CODEX: ("Codex", "Optional AI backend for titles, dates and OCR correction."),
 }
@@ -162,6 +162,7 @@ class SetupPanel(QWidget):
 def _controls(badge: QLabel, button: QPushButton | None) -> QWidget:
     """Badge and optional button side by side."""
     container = QWidget()
+    container.setObjectName("rowControls")
     layout = QHBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(10)

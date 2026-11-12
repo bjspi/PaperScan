@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from importlib.resources import files
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from paperscan import __version__
@@ -17,6 +17,11 @@ from paperscan.platform_tools import set_windows_app_id
 from paperscan.settings import SettingsStore
 
 SPLASH_ICON_SIZE = 256
+#: Caption pill below the splash icon: gap, height, colour (translucent dark) and font size.
+SPLASH_CAPTION_GAP = 12
+SPLASH_CAPTION_HEIGHT = 34
+SPLASH_CAPTION_COLOR = "#d91f2329"
+SPLASH_FONT_POINTS = 11
 QT_STYLE = "Fusion"
 #: Application icon shipped as package data.
 APP_ICON = files("paperscan.gui") / "resources" / "app_icon.png"
@@ -25,15 +30,35 @@ APP_ICON_SIZES = files("paperscan.gui") / "resources" / "app_icon.ico"
 
 
 def _splash_screen() -> QSplashScreen:
-    """Show the app icon with its name while the main window loads."""
-    pixmap = QPixmap(str(APP_ICON)).scaled(
-        SPLASH_ICON_SIZE, SPLASH_ICON_SIZE, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
-    )
-    splash = QSplashScreen(pixmap, Qt.WindowType.WindowStaysOnTopHint)
-    splash.showMessage(f"{APP_NAME} {__version__}", Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, Qt.GlobalColor.white)
+    """Show the app icon with its name and version below it while the main window loads."""
+    splash = QSplashScreen(_splash_pixmap(), Qt.WindowType.WindowStaysOnTopHint)
+    splash.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     splash.show()
     QApplication.processEvents()
     return splash
+
+
+def _splash_pixmap() -> QPixmap:
+    """Return the icon above a dark caption pill (readable on any desktop), on a transparent canvas."""
+    icon = QPixmap(str(APP_ICON)).scaled(
+        SPLASH_ICON_SIZE, SPLASH_ICON_SIZE, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+    )
+    canvas = QPixmap(SPLASH_ICON_SIZE, SPLASH_ICON_SIZE + SPLASH_CAPTION_GAP + SPLASH_CAPTION_HEIGHT)
+    canvas.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(canvas)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.drawPixmap(0, 0, icon)
+    caption = QRectF(0, SPLASH_ICON_SIZE + SPLASH_CAPTION_GAP, SPLASH_ICON_SIZE, SPLASH_CAPTION_HEIGHT)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(SPLASH_CAPTION_COLOR))
+    painter.drawRoundedRect(caption, SPLASH_CAPTION_HEIGHT / 2, SPLASH_CAPTION_HEIGHT / 2)
+    font = painter.font()
+    font.setPointSize(SPLASH_FONT_POINTS)
+    painter.setFont(font)
+    painter.setPen(QColor(Qt.GlobalColor.white))
+    painter.drawText(caption, Qt.AlignmentFlag.AlignCenter, f"{APP_NAME} {__version__}")
+    painter.end()
+    return canvas
 
 
 def _app_icon() -> QIcon:

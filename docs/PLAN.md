@@ -15,7 +15,7 @@ control over cropping, filters, compression, OCR and file names, and everything 
 
 | ID  | Requirement |
 | --- | --- |
-| R1  | Import the newest camera photos from an Android phone over ADB (photos stay on the phone). Local files work too. |
+| R1  | Import the newest camera photos from an Android phone over ADB (photos stay on the phone), by USB or — as a fallback — Wireless debugging. Local files work too. |
 | R2  | Several photos form **one document** (one PDF); a single photo is just the one-page case. All pages share one filter setting by default. |
 | R3  | Automatic page border detection that copes with real backgrounds; the user can correct every corner by hand. |
 | R4  | Adaptive enhancement that copes with sun, shadows and folds (local background estimation). |
@@ -98,8 +98,8 @@ flowchart LR
 ## 5. GUI
 
 * **Main window**
-  * Toolbar with icons: *From phone*, *Add photos*, *Add folder*, *Compare filters*,
-    *New document*, *Settings*.
+  * Header bar (app icon and name) with icons: *From phone*, *Add photos*, *Add folder*,
+    *Compare filters*; *New document* and *Settings* set apart on the right.
   * Left: page strip with thumbnails, drag & drop to reorder, right-click menu.
   * Centre (40 %): page actions above the photo (rotate, detect edges, whole photo, remove),
     corner editor with draggable corners and edges and a magnifier.
@@ -122,7 +122,7 @@ flowchart LR
 paperscan                     # opens the GUI
 paperscan scan a.jpg b.jpg --filter clear --ai claude_cli
 paperscan scan --phone 5 --gray --json
-paperscan phone list|pull
+paperscan phone list|pull|connect|pair
 paperscan model import page_corners.tflite
 paperscan config show|path
 paperscan doctor

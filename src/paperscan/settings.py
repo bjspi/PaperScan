@@ -23,7 +23,7 @@ from typing import Any
 
 from paperscan.analysis.vision import AnalysisProvider, ProviderConfig
 from paperscan.app_paths import CONFIG_FILE, DEFAULT_OUTPUT_DIR, IMPORT_DIR, MODEL_PATH
-from paperscan.capture.adb_import import DEFAULT_CAMERA_DIR
+from paperscan.capture.adb_import import DEFAULT_CAMERA_DIR, AdbClient
 from paperscan.export.jpeg_encoding import JpegOptions
 from paperscan.export.naming import FileDateStyle
 from paperscan.imaging.filters import FilterSettings
@@ -52,6 +52,14 @@ class PhoneSettings:
     serial: str = ""
     camera_dir: str = DEFAULT_CAMERA_DIR
     list_count: int = 30
+    #: Look for the phone over Wireless debugging when none is connected by USB.
+    wireless_fallback: bool = True
+    #: ``IP[:port]`` for the Wi-Fi fallback; empty discovers a paired phone on the network.
+    wireless_address: str = ""
+
+    def adb_client(self) -> AdbClient:
+        """Return an adb client for the configured phone (raises if adb is missing)."""
+        return AdbClient(self.adb_path, self.serial, wireless_fallback=self.wireless_fallback, wireless_address=self.wireless_address)
 
 
 @dataclass(frozen=True)

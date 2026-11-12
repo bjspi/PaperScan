@@ -19,3 +19,6 @@ dist/
 
 # Owner notes (verbatim requirements, personal context). Never commit.
 docs/*.local.md
+
+# Local Claude Code project memory (personal context). Never commit.
+CLAUDE.local.md

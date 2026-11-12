@@ -33,6 +33,7 @@ from paperscan.app_paths import APP_NAME
 from paperscan.export.jpeg_encoding import ChromaSubsampling
 from paperscan.export.naming import FileDateStyle
 from paperscan.gui.number_field import NumberField
+from paperscan.gui.phone_connection import PhoneConnectionCard
 from paperscan.gui.setting_rows import CONTROL_COLUMN_WIDTH, Card, page_body, setting_row
 from paperscan.gui.setup_panel import SetupPanel
 from paperscan.gui.toggle_switch import ToggleSwitch
@@ -107,6 +108,8 @@ class SettingsPage:
     sections: tuple[SettingsSection, ...]
 
 
+PHONE_PAGE_TITLE = "Phone"
+
 PAGES: tuple[SettingsPage, ...] = (
     SettingsPage(
         "General",
@@ -129,8 +132,8 @@ PAGES: tuple[SettingsPage, ...] = (
         ),
     ),
     SettingsPage(
-        "Phone",
-        "Import photos over USB debugging (ADB)",
+        PHONE_PAGE_TITLE,
+        "Import photos over USB debugging or Wireless debugging (ADB)",
         (
             SettingsSection(
                 "CAMERA",
@@ -146,6 +149,18 @@ PAGES: tuple[SettingsPage, ...] = (
                 "CONNECTION",
                 (
                     SettingField("phone.serial", FieldKind.TEXT, "Device serial", "Only needed with several devices connected."),
+                    SettingField(
+                        "phone.wireless_fallback",
+                        FieldKind.SWITCH,
+                        "Wi-Fi fallback",
+                        "If no phone is on USB, look for one with Wireless debugging on (paired once).",
+                    ),
+                    SettingField(
+                        "phone.wireless_address",
+                        FieldKind.TEXT,
+                        "Wi-Fi address",
+                        "IP:port from Wireless debugging. Empty finds the paired phone on the network.",
+                    ),
                     SettingField("phone.adb_path", FieldKind.FILE, "adb", "Leave empty to find it automatically.", tool=Tool.ADB),
                 ),
             ),
@@ -281,8 +296,11 @@ class SettingsWindow(QWidget):
         root.setSpacing(0)
         root.addWidget(self._build_sidebar())
         root.addLayout(self._build_content(), 1)
+        phone_connection = PhoneConnectionCard(self.current_settings)
         for page in PAGES:
             cards = [self._build_section(section) for section in page.sections]
+            if page.title == PHONE_PAGE_TITLE:
+                cards.append(phone_connection)
             self._add_page(page.title, page.subtitle, page_body(*cards))
         self._setup_panel = SetupPanel(self.current_settings)
         self._add_page(*TOOLS_PAGE, self._setup_panel)
@@ -314,6 +332,10 @@ class SettingsWindow(QWidget):
     def open_tools_page(self) -> None:
         """Jump to the tools page (used by the first-start check)."""
         self._nav.setCurrentRow(len(PAGES))
+
+    def open_phone_page(self) -> None:
+        """Jump to the phone page (used when no phone is found)."""
+        self._nav.setCurrentRow([page.title for page in PAGES].index(PHONE_PAGE_TITLE))
 
     # --- Layout ---------------------------------------------------------------------------------
 

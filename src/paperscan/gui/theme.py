@@ -75,12 +75,17 @@ DARK: dict[str, str] = {
 
 _QSS = """
 QWidget { background-color: %(bg)s; color: %(text)s; font-size: 10pt; }
-QLabel, QSlider, QWidget#settingRow, QWidget#sliderRow, QWidget#pageBody,
+QLabel, QSlider, QWidget#settingRow, QWidget#rowControls, QWidget#sliderRow, QWidget#pageBody,
 QFrame#card QLabel, QFrame#card QWidget#settingRow, QGroupBox QLabel { background: transparent; }
 QToolTip { background: %(panel)s; color: %(text)s; border: 1px solid %(border)s; padding: 6px; }
 
 /* Toolbar and buttons */
 QToolBar { background: %(panel)s; border: none; border-bottom: 1px solid %(border)s; padding: 4px; spacing: 4px; }
+QToolBar#mainToolbar { background: %(sidebar)s; border-bottom: 1px solid %(sidebar_border)s; padding: 7px 12px; spacing: 6px; }
+QToolBar#mainToolbar::separator { background: %(sidebar_border)s; width: 1px; margin: 6px 10px; }
+QToolBar#mainToolbar QToolButton:hover { background: %(nav_hover)s; border-color: %(sidebar_border)s; }
+QWidget#toolbarBrand, QWidget#toolbarSpacer { background: transparent; }
+QLabel#brandName { font-size: 11pt; font-weight: 600; color: %(heading)s; }
 QToolButton { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; }
 QToolButton:hover { background: %(hover)s; border-color: %(border)s; }
 QToolButton:checked { background: %(selection)s; border-color: %(accent)s; }
@@ -104,7 +109,10 @@ QPushButton#create:hover { background: %(ok_strong_hover)s; }
 QPushButton#create:disabled { background: %(panel2)s; color: %(muted)s; border-color: %(border)s; }
 QToolButton#pageAction { border: 1px solid %(field_border)s; border-radius: 8px; padding: 4px; font-size: 12pt; background: %(panel)s; }
 QToolButton#pageAction:hover { background: %(hover)s; }
-QLabel[capability="ok"] { color: %(ok_text)s; }
+QLabel[capability="ok"], QLabel[connection="ok"] { color: %(ok_text)s; }
+QLabel[connection="error"] { color: %(warn_text)s; }
+QLabel[connection="busy"] { color: %(muted)s; }
+QLabel#dialogTitle { font-size: 12pt; font-weight: 600; color: %(heading)s; }
 QLabel[capability="off"] { color: %(muted)s; }
 
 /* Input fields */

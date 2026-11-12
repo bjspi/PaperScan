@@ -67,6 +67,7 @@ click.rich_click.COMMAND_GROUPS = {
 }
 
 CONTEXT = {"help_option_names": ["-h", "--help"]}
+PHONE_HINT = "Check the connection with: paperscan phone connect"
 
 
 def _fail(message: str, hint: str = "") -> NoReturn:
@@ -422,7 +423,7 @@ def _report_compare(report: CompareReport, as_json: bool) -> None:
 
 @cli.group(context_settings=CONTEXT)
 def phone() -> None:
-    """List and pull camera photos over ADB."""
+    """Find the phone (USB or Wi-Fi), list and pull camera photos over ADB."""
 
 
 @phone.command("list", context_settings=CONTEXT)
@@ -435,7 +436,7 @@ def phone_list(store: SettingsStore, count: int, as_json: bool) -> None:
     try:
         photos = _adb(settings).list_photos(settings.phone.camera_dir, count)
     except AdbError as exc:
-        _fail(str(exc), "Is the phone connected with USB debugging allowed?")
+        _fail(str(exc), PHONE_HINT)
     if as_json:
         output.print_json(photos)
         return
@@ -455,10 +456,42 @@ def phone_pull(store: SettingsStore, count: int, dest: Path | None) -> None:
         output.stdout.print(str(path))
 
 
-def _adb(settings: AppSettings) -> AdbClient:
-    """Return an adb client for the configured device."""
+@phone.command("connect", context_settings=CONTEXT)
+@click.pass_obj
+def phone_connect(store: SettingsStore) -> None:
+    """Find the phone: USB first, then Wireless debugging (if the Wi-Fi fallback is on)."""
     try:
-        return AdbClient(settings.phone.adb_path, settings.phone.serial)
+        device = _adb(store.load()).connect()
+    except AdbError as exc:
+        _fail(str(exc))
+    output.success(f"Phone ready: {device.label} · serial {device.serial}")
+
+
+@phone.command("pair", context_settings=CONTEXT)
+@click.argument("address")
+@click.argument("code")
+@click.pass_obj
+def phone_pair(store: SettingsStore, address: str, code: str) -> None:
+    """Pair with a phone over Wi-Fi (one-time step).
+
+    On the phone open Developer options → Wireless debugging → Pair device with pairing code,
+    then pass the IP address:port and the six-digit code shown there.
+
+    [dim]Example:[/] paperscan phone pair 192.168.1.20:37011 482913
+    """
+    client = _adb(store.load())
+    try:
+        client.pair(address, code)
+        device = client.connect()
+    except AdbError as exc:
+        _fail(str(exc))
+    output.success(f"Paired. Phone ready: {device.label}")
+
+
+def _adb(settings: AppSettings) -> AdbClient:
+    """Return an adb client for the configured phone."""
+    try:
+        return settings.phone.adb_client()
     except ToolMissingError as exc:
         _fail(str(exc))
 
@@ -471,7 +504,7 @@ def _pull_from_phone(settings: AppSettings, count: int, dest: Path | None = None
         photos = client.list_photos(settings.phone.camera_dir, count)
         return [(client.pull(photo, target), photo) for photo in reversed(photos)]
     except AdbError as exc:
-        _fail(str(exc), "Is the phone connected with USB debugging allowed?")
+        _fail(str(exc), PHONE_HINT)
 
 
 # --- model, config, doctor -----------------------------------------------------------------------
@@ -579,13 +612,12 @@ def doctor(store: SettingsStore) -> None:
 
 
 def _phone_status(settings: AppSettings) -> str:
-    """Return which phones adb sees, or why it cannot tell."""
+    """Return the phone PaperScan would use (USB, else Wi-Fi), or why there is none."""
     try:
-        devices = AdbClient(settings.phone.adb_path, settings.phone.serial).devices()
+        device = settings.phone.adb_client().connect()
     except (ToolMissingError, AdbError) as exc:
         return f"[warn]{exc}[/warn]"
-    ready = [device.model or device.serial for device in devices if device.ready]
-    return f"[ok]{', '.join(ready)}[/ok]" if ready else "[warn]no authorised device connected[/warn]"
+    return f"[ok]{device.label}[/ok]"
 
 
 def _status(path: Path | None) -> str:

@@ -62,7 +62,7 @@ level and degrade gracefully when missing; there are no function-local imports.
 | `imaging/filter_variants.py` | Presets, one-parameter sweeps, `field=value` text conversion, overview sheet. |
 | `imaging/model_import.py` | Installs an optional `.tflite` page corner model. |
 | `capture/photo_files.py` | Loading with EXIF orientation (and HEIC), capture time, folder listing, EXIF thumbnails. |
-| `capture/adb_import.py` | `AdbClient`: list, read header bytes, thumbnail, pull and delete phone photos. |
+| `capture/adb_import.py` | `AdbClient`: chooses the phone (serial, else USB, else Wireless debugging via a configured address or mDNS), pairs over Wi-Fi, lists, reads header bytes, thumbnails, pulls and deletes phone photos. |
 | `ocr/recognition.py` | Tesseract TSV → `OcrLine`/`OcrPage`; fails loudly if no TSV comes back. |
 | `export/jpeg_encoding.py` | cjpegli (jpegli) with a Pillow fallback; never writes metadata. |
 | `export/pdf_builder.py` | One JPEG per page plus invisible text stretched to each line box. |
@@ -95,6 +95,7 @@ level and degrade gracefully when missing; there are no function-local imports.
 | `gui/export_dialog.py` | Review dialog: AI on demand, title, date, editable file name, folder, phone deletion. |
 | `gui/compare_dialog.py` | Variant grid that opens at once and fills in when rendering finishes. |
 | `gui/phone_dialog.py` | Phone photo grid with lazily loaded EXIF thumbnails and series preselection. |
+| `gui/phone_connection.py` | Connection check and Wi-Fi pairing on the phone settings page; search dialog that retries until a phone appears. |
 | `gui/settings_window.py` | Sidebar settings declared as data (`SettingsPage` → `SettingsSection` → `SettingField`). |
 | `gui/setup_panel.py` | Tool status badges and one-click installation. |
 | `gui/setting_rows.py`, `toggle_switch.py`, `number_field.py`, `line_icons.py`, `image_view.py`, `images.py` | Reusable widgets and helpers. |
@@ -174,6 +175,8 @@ points to the log file.
 * `tests/test_variants.py` — presets, sweeps, text conversion round trip, overview, rating.
 * `tests/test_workflow.py` — behaviour: photos → one PDF, cancellation, shared vs. per-page
   filters, reordering and rotation, phone photos marked for deletion.
+* `tests/test_phone_connection.py` — phone choice: USB before Wi-Fi, mDNS fallback, configured
+  address, several phones, pairing replies (adb is faked).
 * `tests/test_gui_settings.py` — the real settings window returns correctly typed settings.
 
 No test needs Tesseract, adb, a model, network or personal data.

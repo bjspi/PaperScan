@@ -56,8 +56,8 @@ document itself. No scanner app, no cloud scanner service, no copying files arou
 
 ## ✨ Highlights
 
-- 📱 **Phone, files or folders** — the newest camera photos over USB (ADB) with thumbnails, single
-  files, whole folders or drag & drop. Several photos form one document; one photo works too.
+- 📱 **Phone, files or folders** — the newest camera photos over USB (ADB) with thumbnails, or over
+  Wi-Fi (Wireless debugging) when no cable is plugged in; single files, whole folders or drag & drop. Several photos form one document; one photo works too.
 - 📐 **Finds the page** — neural border detection (optional) refined by OpenCV, perspective
   correction, corners *and* whole edges draggable, with a magnifier for pixel-exact corners.
 - ☀️ **Adaptive cleanup** — paper turns white under sun, shadows and folds because the paper
@@ -175,7 +175,7 @@ Start it from the Start menu, or with `paperscan`.
 
 | Area | What you do there |
 | --- | --- |
-| Toolbar | *From phone*, *Add photos*, *Add folder* (or drop files), *Compare filters*, *New document*, *Settings* |
+| Header | *From phone*, *Add photos*, *Add folder* (or drop files), *Compare filters*; on the right *New document*, *Settings* |
 | Page strip | Thumbnails of all pages; drag to reorder, right-click for page actions |
 | Page actions | Above the photo: rotate left/right (Ctrl+L / Ctrl+R), detect edges again (Ctrl+D), whole photo (Ctrl+Shift+D), remove page (Del) |
 | Left view | The photo with the detected outline — drag corners or whole edges; a magnifier shows the spot |
@@ -196,6 +196,7 @@ paperscan                         open the desktop app
 paperscan scan PHOTOS…            photos → one PDF (or --each → one PDF per photo)
 paperscan compare PHOTO           render filter variants + overview.jpg (--rate: AI picks)
 paperscan phone list|pull         newest camera photos over ADB
+paperscan phone connect|pair      find the phone (USB, then Wi-Fi) / pair over Wi-Fi once
 paperscan setup                   install missing tools
 paperscan doctor                  tools, model and connected phone
 paperscan model import FILE       optional TFLite page corner model

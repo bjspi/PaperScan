@@ -16,6 +16,7 @@ from typing import Any
 from PySide6.QtCore import QPoint, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QCloseEvent, QDesktopServices, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QToolBar,
     QVBoxLayout,
@@ -32,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from paperscan.analysis.vision import AnalysisProvider, available_providers
 from paperscan.app_paths import APP_NAME, LOG_FILE
-from paperscan.capture.adb_import import AdbClient, RemotePhoto
+from paperscan.capture.adb_import import AdbError, RemotePhoto
 from paperscan.capture.photo_files import is_photo, photos_in_folder
 from paperscan.comparison import rate_renders, render_page_variants
 from paperscan.gui.compare_dialog import CompareDialog
@@ -45,6 +47,7 @@ from paperscan.gui.line_icons import LineIcon, line_icon
 from paperscan.gui.output_panel import OutputPanel
 from paperscan.gui.page_strip import STRIP_WIDTH, PageStrip
 from paperscan.gui.page_toolbar import PageAction, PageToolbar
+from paperscan.gui.phone_connection import PhoneSearchDialog, SearchOutcome, find_phone
 from paperscan.gui.phone_dialog import PhoneDialog
 from paperscan.gui.settings_window import SettingsWindow
 from paperscan.gui.setup_panel import SetupPanel
@@ -65,6 +68,10 @@ log = logging.getLogger(__name__)
 PREVIEW_DEBOUNCE_MS = 120
 TOOLBAR_ICON_SIZE = 18
 TOOLBAR_ICON_COLOR = "#3a4049"
+BRAND_ICON_SIZE = 22
+BRAND_MARGINS = (6, 0, 10, 0)
+#: Gap around the work area, so it reads as a surface of its own below the header.
+WORKSPACE_MARGINS = (12, 12, 12, 10)
 #: Settings edited directly in the output panel.
 OUTPUT_PANEL_PATHS = ("max_edge", "jpeg.quality")
 #: Settings remembered from the save dialog.
@@ -145,6 +152,35 @@ class MainWindow(QMainWindow):
         self._editor = CornerEditor()
         self._editor.quad_changed.connect(self._quad_edited)
         self._preview = ImageView("Add photos from the phone or a folder to start.")
+        central = QWidget()
+        layout = QHBoxLayout(central)
+        layout.setContentsMargins(*WORKSPACE_MARGINS)
+        layout.addWidget(self._strip)
+        layout.addWidget(self._build_views(), 1)
+        layout.addLayout(self._build_side_panel())
+        self.setCentralWidget(central)
+        self._build_status_bar()
+        self._refresh_capabilities()
+
+    def _build_views(self) -> QSplitter:
+        """Corner editor (with the page actions above it) next to the finished-page preview."""
+        views = QSplitter()
+        views.setChildrenCollapsible(False)
+        editor_column = QWidget()
+        editor_layout = QVBoxLayout(editor_column)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.setSpacing(4)
+        editor_layout.addWidget(self._page_toolbar)
+        editor_layout.addWidget(self._editor, 1)
+        views.addWidget(editor_column)
+        views.addWidget(self._preview)
+        views.setStretchFactor(0, EDITOR_SHARE)
+        views.setStretchFactor(1, PREVIEW_SHARE)
+        views.setSizes([EDITOR_SHARE * SPLIT_UNIT, PREVIEW_SHARE * SPLIT_UNIT])
+        return views
+
+    def _build_side_panel(self) -> QVBoxLayout:
+        """Filter, output and workflow panels stacked on the right."""
         self._filters = FilterPanel()
         self._filters.setFixedWidth(FILTER_PANEL_WIDTH)
         self._filters.settings_changed.connect(self._filter_edited)
@@ -161,61 +197,52 @@ class MainWindow(QMainWindow):
         side.addWidget(self._filters, 1)
         side.addWidget(self._output)
         side.addWidget(self._workflow)
-        views = QSplitter()
-        views.setChildrenCollapsible(False)
-        editor_column = QWidget()
-        editor_layout = QVBoxLayout(editor_column)
-        editor_layout.setContentsMargins(0, 0, 0, 0)
-        editor_layout.setSpacing(4)
-        editor_layout.addWidget(self._page_toolbar)
-        editor_layout.addWidget(self._editor, 1)
-        views.addWidget(editor_column)
-        views.addWidget(self._preview)
-        views.setStretchFactor(0, EDITOR_SHARE)
-        views.setStretchFactor(1, PREVIEW_SHARE)
-        views.setSizes([EDITOR_SHARE * SPLIT_UNIT, PREVIEW_SHARE * SPLIT_UNIT])
-        central = QWidget()
-        layout = QHBoxLayout(central)
-        layout.addWidget(self._strip)
-        layout.addWidget(views, 1)
-        layout.addLayout(side)
-        self.setCentralWidget(central)
-        self._build_status_bar()
-        self._refresh_capabilities()
+        return side
 
     def _build_toolbar(self) -> QToolBar:
-        """Create the document-level actions (page actions live above the editor)."""
+        """Create the app header: brand, adding pages, comparing, and app-wide actions on the right.
+
+        Page actions live above the editor, the export in the workflow panel, so the header
+        only holds what starts or frames the work.
+        """
         toolbar = QToolBar("Main")
+        toolbar.setObjectName("mainToolbar")
         toolbar.setMovable(False)
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         toolbar.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._actions: dict[str, QAction] = {}
-        entries: list[ToolbarEntry | None] = [
+        add_pages = [
             ToolbarEntry("phone", "From phone", LineIcon.PHONE, self._import_from_phone, "Ctrl+P"),
             ToolbarEntry("files", "Add photos", LineIcon.ADD_PHOTOS, self._add_photos, "Ctrl+O"),
             ToolbarEntry("folder", "Add folder", LineIcon.ADD_FOLDER, self._add_folder, "Ctrl+Shift+O"),
-            None,
-            ToolbarEntry("compare", "Compare filters", LineIcon.COMPARE, self._compare_filters, "Ctrl+K"),
-            None,
+        ]
+        review = [ToolbarEntry("compare", "Compare filters", LineIcon.COMPARE, self._compare_filters, "Ctrl+K")]
+        app_wide = [
             ToolbarEntry("new", "New document", LineIcon.NEW_DOCUMENT, self._new_document, "Ctrl+N"),
             ToolbarEntry("settings", "Settings", LineIcon.SETTINGS, self._open_settings, "Ctrl+,"),
         ]
-        for entry in entries:
-            if entry is None:
-                toolbar.addSeparator()
-                continue
-            action = QAction(line_icon(entry.icon, TOOLBAR_ICON_COLOR, TOOLBAR_ICON_SIZE), entry.text, self)
-            action.triggered.connect(entry.handler)
-            action.setShortcut(QKeySequence(entry.shortcut))
-            action.setToolTip(f"{entry.text} ({entry.shortcut})")
-            toolbar.addAction(action)
-            self._actions[entry.key] = action
+        toolbar.addWidget(_toolbar_brand())
+        for group in (add_pages, review):
+            toolbar.addSeparator()
+            self._add_toolbar_entries(toolbar, group)
+        toolbar.addWidget(_toolbar_spacer())
+        self._add_toolbar_entries(toolbar, app_wide)
         export = QAction("Create PDF", self)
         export.setShortcut(QKeySequence("Ctrl+S"))
         export.triggered.connect(self._export)
         self.addAction(export)
         self._actions["export"] = export
         return toolbar
+
+    def _add_toolbar_entries(self, toolbar: QToolBar, entries: list[ToolbarEntry]) -> None:
+        """Add one action per entry and remember it under its key."""
+        for entry in entries:
+            action = QAction(line_icon(entry.icon, TOOLBAR_ICON_COLOR, TOOLBAR_ICON_SIZE), entry.text, self)
+            action.triggered.connect(entry.handler)
+            action.setShortcut(QKeySequence(entry.shortcut))
+            action.setToolTip(f"{entry.text} ({entry.shortcut})")
+            toolbar.addAction(action)
+            self._actions[entry.key] = action
 
     def _build_status_bar(self) -> None:
         """Status text, progress bar and cancel button."""
@@ -281,10 +308,26 @@ class MainWindow(QMainWindow):
         settings = self._settings
 
         def work(_progress: Callable[[str, float], None]) -> list[RemotePhoto]:
-            client = AdbClient(settings.phone.adb_path, settings.phone.serial)
+            client = settings.phone.adb_client()
             return client.list_photos(settings.phone.camera_dir, settings.phone.list_count)
 
-        self._run("Reading the phone …", work, self._choose_phone_photos)
+        self._run("Reading the phone …", work, self._choose_phone_photos, self._phone_unavailable)
+
+    def _phone_unavailable(self, error: Exception) -> None:
+        """Keep looking for the phone in a dialog; continue the import once it appears."""
+        if not isinstance(error, AdbError):
+            self._task_failed(error)
+            return
+        self._set_status("No phone found")
+        dialog = PhoneSearchDialog(str(error), lambda: find_phone(self._settings.phone), self)
+        dialog.exec()
+        match dialog.outcome():
+            case SearchOutcome.FOUND:
+                self._import_from_phone()
+            case SearchOutcome.OPEN_SETTINGS:
+                self._open_settings().open_phone_page()
+            case SearchOutcome.CANCELLED:
+                self._set_status("Ready")
 
     def _choose_phone_photos(self, photos: list[RemotePhoto]) -> None:
         """Show the phone dialog and pull the chosen photos."""
@@ -292,7 +335,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Phone", "No photos found in the camera folder.")
             return
         settings = self._settings
-        client = AdbClient(settings.phone.adb_path, settings.phone.serial)
+        client = settings.phone.adb_client()
         import_dir = Path(settings.import_dir).expanduser()
         dialog = PhoneDialog(photos, lambda photo: client.thumbnail(photo, import_dir, PHONE_THUMBNAIL_EDGE), self)
         if not dialog.exec() or not dialog.selected_photos():
@@ -607,7 +650,7 @@ class MainWindow(QMainWindow):
         settings = self._settings
 
         def work(progress: Callable[[str, float], None]) -> int:
-            client = AdbClient(settings.phone.adb_path, settings.phone.serial)
+            client = settings.phone.adb_client()
             for number, photo in enumerate(photos, start=1):
                 progress(f"Deleting {photo.name} from the phone", number / len(photos))
                 client.delete(photo)
@@ -669,8 +712,17 @@ class MainWindow(QMainWindow):
 
     # --- Background jobs ------------------------------------------------------------------------
 
-    def _run(self, message: str, work: Callable[[Callable[[str, float], None]], Any], on_success: Callable[[Any], None]) -> None:
-        """Run ``work`` in the background with status, progress and error handling."""
+    def _run(
+        self,
+        message: str,
+        work: Callable[[Callable[[str, float], None]], Any],
+        on_success: Callable[[Any], None],
+        on_failure: Callable[[Exception], None] | None = None,
+    ) -> None:
+        """Run ``work`` in the background with status, progress and error handling.
+
+        ``on_failure`` replaces the default error dialog for failures the caller can recover from.
+        """
         self._busy_jobs += 1
         self._set_status(message)
         # Busy animation until the task reports a percentage (some steps, like reading the phone, never do).
@@ -689,7 +741,7 @@ class MainWindow(QMainWindow):
             if isinstance(error, ExportCancelledError):
                 self._set_status("Export cancelled")
                 return
-            self._task_failed(error)
+            (on_failure or self._task_failed)(error)
 
         start_task(work, finished, failed, self._show_progress)
 
@@ -740,3 +792,27 @@ class MainWindow(QMainWindow):
         """Stop a running export before closing."""
         self._cancel_export.set()
         super().closeEvent(event)
+
+
+def _toolbar_brand() -> QWidget:
+    """Return the app icon and name that open the header."""
+    brand = QWidget()
+    brand.setObjectName("toolbarBrand")
+    layout = QHBoxLayout(brand)
+    layout.setContentsMargins(*BRAND_MARGINS)
+    layout.setSpacing(8)
+    icon = QLabel()
+    icon.setPixmap(QApplication.windowIcon().pixmap(BRAND_ICON_SIZE, BRAND_ICON_SIZE))
+    name = QLabel(APP_NAME)
+    name.setObjectName("brandName")
+    layout.addWidget(icon)
+    layout.addWidget(name)
+    return brand
+
+
+def _toolbar_spacer() -> QWidget:
+    """Return a stretching gap that pushes the following actions to the right edge."""
+    spacer = QWidget()
+    spacer.setObjectName("toolbarSpacer")
+    spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+    return spacer
