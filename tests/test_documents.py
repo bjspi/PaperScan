@@ -117,6 +117,15 @@ def test_pdf_has_selectable_text_at_the_right_place(tmp_path: Path, document_pho
         assert document.metadata["title"] == "Test"
 
 
+def test_pdf_text_layer_keeps_characters_beyond_latin_1(tmp_path: Path, document_photo_file: Path) -> None:
+    lines = ("Betrag 12,34 € – überwiesen", "Łódź Ωμέγα Жук", "合计金额")
+    ocr = OcrPage(900, 1200, tuple(OcrLine(text, 100, 100 + 60 * index, 600, 30) for index, text in enumerate(lines)))
+    target = tmp_path / "out.pdf"
+    build_pdf([PdfPage(document_photo_file.read_bytes(), 900, 1200, ocr)], PdfMetadata(title="Test"), target)
+    with pymupdf.open(target) as document:
+        assert document[0].get_text().split("\n")[:3] == list(lines)
+
+
 def test_settings_roundtrip_and_defaults_for_invalid_values(tmp_path: Path) -> None:
     store = SettingsStore(tmp_path / "config.json")
     changed = with_setting(AppSettings(), "ai.provider.provider", AnalysisProvider.CLAUDE_CLI)

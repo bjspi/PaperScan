@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from paperscan.app_paths import TESSDATA_DIR, TOOLS_DIR, make_reproducible_dir
+from paperscan.app_paths import TESSDATA_DIR, TOOLS_DIR, make_reproducible_dir, partial_path
 from paperscan.platform_tools import IS_MACOS, IS_WINDOWS, Tool, find_tool, run_tool
 
 log = logging.getLogger(__name__)
@@ -166,12 +166,20 @@ def _run_package_manager(step: SetupStep, progress: SetupProgress) -> None:
 
 
 def _download(url: str, target: Path) -> None:
-    """Download ``url`` (HTTPS only) to ``target``."""
+    """Download ``url`` (HTTPS only) to ``target``.
+
+    The data goes to a temporary file that replaces ``target`` only when complete, so an
+    interrupted download never leaves a broken file that later runs would take as installed.
+    """
     if not url.startswith("https://"):
         raise SetupError(f"Refusing non-HTTPS download: {url}")
     log.info("Downloading %s", url)
+    partial = partial_path(target)
     try:
-        with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT) as response, target.open("wb") as file:  # noqa: S310 - HTTPS checked above
+        with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT) as response, partial.open("wb") as file:  # noqa: S310 - HTTPS checked above
             shutil.copyfileobj(response, file, DOWNLOAD_CHUNK)
+        partial.replace(target)
     except OSError as exc:
         raise SetupError(f"Download failed ({url}): {exc}") from exc
+    finally:
+        partial.unlink(missing_ok=True)

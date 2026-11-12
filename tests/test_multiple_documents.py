@@ -19,6 +19,7 @@ from paperscan.capture.adb_import import RemotePhoto
 from paperscan.capture.photo_files import SERIES_GAP
 from paperscan.export.naming import FileDateStyle
 from paperscan.gui.export_dialog import DocumentReview, ExportDialog
+from paperscan.gui.main_window import _photos_of_saved_documents
 from paperscan.gui.page_strip import HEADER_ROLE, PageStrip, document_header
 from paperscan.imaging.filters import FilterSettings
 from paperscan.imaging.geometry import Quad
@@ -109,6 +110,15 @@ def test_phone_photos_of_selected_pages() -> None:
     session.split_before(1)
     first = session.document_ranges()[0]
     assert [photo.name for photo in session.phone_photos(first)] == ["a.jpg"]
+
+
+def test_only_photos_of_saved_documents_are_offered_for_deletion() -> None:
+    photos = {name: RemotePhoto(path=f"/sdcard/DCIM/Camera/{name}.jpg", modified=START, size=1) for name in "abc"}
+    # Documents as taken when the export started: [a, b], [b, c] (b backs both), [c].
+    per_document = [[photos["a"], photos["b"]], [photos["b"], photos["c"]], [photos["c"]]]
+    assert _photos_of_saved_documents(per_document, [0]) == [photos["a"]]
+    assert _photos_of_saved_documents(per_document, [0, 1, 2]) == [photos["a"], photos["b"], photos["c"]]
+    assert _photos_of_saved_documents(per_document, []) == []
 
 
 def test_two_documents_become_two_drafts(document_photo_file: Path, tmp_path: Path) -> None:

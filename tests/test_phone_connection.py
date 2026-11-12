@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from paperscan.capture import adb_import
-from paperscan.capture.adb_import import AdbClient, AdbError, _parse_mdns_line
+from paperscan.capture.adb_import import AdbClient, AdbError, RemotePhoto, _parse_mdns_line
 
 ADB = "adb"
 USB_LINE = "R58M123ABC device product:x model:Pixel_8 device:y"
@@ -105,3 +106,50 @@ def test_pairing_checks_the_reply(fake_adb: FakeAdb) -> None:
 def test_mdns_parsing_skips_pairing_services() -> None:
     lines = MDNS_OUTPUT.splitlines()
     assert [_parse_mdns_line(line) for line in lines] == [None, None, WIFI_SERIAL]
+
+
+def _photo(modified: datetime, size: int) -> RemotePhoto:
+    return RemotePhoto(path="/sdcard/DCIM/Camera/IMG_0001.jpg", modified=modified, size=size)
+
+
+@pytest.fixture
+def phone_pulls(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    """Fake one USB phone whose ``adb pull`` writes the target file; returns the pull targets."""
+    targets: list[Path] = []
+
+    def run_tool(arguments: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+        del timeout
+        if "pull" in arguments:
+            targets.append(Path(arguments[-1]))
+            targets[-1].write_bytes(b"photo")
+        return subprocess.CompletedProcess(arguments, 0, stdout=f"{HEADER}\n{USB_LINE}\n", stderr="")
+
+    monkeypatch.setattr(adb_import, "require_tool", lambda _tool, _configured="": Path(ADB))
+    monkeypatch.setattr(adb_import, "run_tool", run_tool)
+    return targets
+
+
+def test_photos_with_the_same_name_get_separate_local_copies(phone_pulls: list[Path], tmp_path: Path) -> None:
+    first = _photo(datetime(2026, 1, 2, 3, 4, 5), 1000)
+    second = _photo(datetime(2026, 5, 6, 7, 8, 9), 1000)
+    assert first.local_name == "IMG_0001_20260102-030405_1000.jpg"
+    client = AdbClient()
+    assert client.pull(first, tmp_path).name == first.local_name
+    assert client.pull(second, tmp_path).name == second.local_name
+    assert [path.suffix for path in phone_pulls] == [".part", ".part"]
+    assert sorted(path.name for path in tmp_path.iterdir()) == sorted([first.local_name, second.local_name])
+
+
+def test_interrupted_pull_leaves_no_photo_behind(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def run_tool(arguments: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+        del timeout
+        if "pull" in arguments:
+            Path(arguments[-1]).write_bytes(b"half a photo")
+            raise subprocess.CalledProcessError(1, arguments, stderr="device offline")
+        return subprocess.CompletedProcess(arguments, 0, stdout=f"{HEADER}\n{USB_LINE}\n", stderr="")
+
+    monkeypatch.setattr(adb_import, "require_tool", lambda _tool, _configured="": Path(ADB))
+    monkeypatch.setattr(adb_import, "run_tool", run_tool)
+    with pytest.raises(AdbError, match="device offline"):
+        AdbClient().pull(_photo(datetime(2026, 1, 2, 3, 4, 5), 1000), tmp_path)
+    assert list(tmp_path.iterdir()) == []

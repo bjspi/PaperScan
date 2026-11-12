@@ -48,6 +48,8 @@ param(
     $uvInstalled = [bool](Get-Command uv -ErrorAction SilentlyContinue)
     # Folder for the paperscan command shim; added to the user PATH if missing.
     $commandFolder = Join-Path $HOME '.local\bin'
+    # Seconds to wait for a running PaperScan to close (the user may have to answer its question first).
+    $closeTimeoutSeconds = 120
     # Seconds the window stays open after a successful run, so the summary can be read.
     $closeDelaySeconds = 10
 
@@ -231,16 +233,27 @@ param(
     }
 
 
-    function Stop-RunningApp {
-        # A running app locks its .exe launchers, so updating them would fail halfway.
+    function Get-RunningApp {
+        # Processes of this installation: the .exe launchers and the Python they start (other clones are left alone).
         param([string]$Venv)
         $scripts = (Join-Path $Venv 'Scripts').ToLowerInvariant()
-        $running = @(Get-Process -Name 'paperscan', 'paperscanw' -ErrorAction SilentlyContinue |
+        @(Get-Process -Name 'paperscan', 'paperscanw', 'python', 'pythonw' -ErrorAction SilentlyContinue |
             Where-Object { $_.Path -and $_.Path.ToLowerInvariant().StartsWith($scripts) })
+    }
+
+
+    function Stop-RunningApp {
+        # A running app locks its .exe launchers, so updating them would fail halfway.
+        # Its window is closed like a click on the close button, so the app can ask before unsaved pages are lost.
+        param([string]$Venv)
+        $running = Get-RunningApp $Venv
         if (-not $running) { return }
-        Write-Host "==> Closing the running $appName so it can be updated"
-        $running | Stop-Process -Force
-        $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+        Write-Host "==> Closing the running $appName so it can be updated (answer its question if it asks)"
+        foreach ($process in $running) { [void]$process.CloseMainWindow() }
+        $running | Wait-Process -Timeout $closeTimeoutSeconds -ErrorAction SilentlyContinue
+        if (Get-RunningApp $Venv) {
+            throw "$appName is still running. Close it (and any paperscan command in a terminal), then run the installer again."
+        }
     }
 
 
@@ -277,7 +290,14 @@ param(
         param([string]$Venv)
         New-Item -ItemType Directory -Force -Path $commandFolder | Out-Null
         $exe = Join-Path $Venv 'Scripts\paperscan.exe'
-        Set-Content -Encoding ASCII -Path (Join-Path $commandFolder 'paperscan.cmd') -Value "@`"$exe`" %*"
+        # cmd.exe reads .cmd files in the console (OEM) code page, so a path such as C:\Users\<name with
+        # umlauts> only survives in that encoding. A path it cannot represent is reported.
+        $shim = Join-Path $commandFolder 'paperscan.cmd'
+        $line = "@`"$exe`" %*"
+        Set-Content -Encoding Oem -Path $shim -Value $line
+        if ((Get-Content -Encoding Oem -Path $shim) -ne $line) {
+            Write-Host "    The paperscan command will not work: the console cannot represent its path ($exe). Use the Start menu entry." -ForegroundColor Yellow
+        }
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         $entries = @($userPath -split ';' | Where-Object { $_ })
         if ($entries -notcontains $commandFolder) {

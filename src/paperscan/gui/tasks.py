@@ -35,12 +35,19 @@ class Task(QRunnable):
         """Wrap ``work``; it receives a progress callback ``(message, fraction)``."""
         super().__init__()
         self.signals = TaskSignals()
-        self._work = work
+        self._work: Callable[[Callable[[str, float], None]], Any] | None = work
 
     def run(self) -> None:
-        """Execute the work and emit ``succeeded`` or ``failed``."""
+        """Execute the work and emit ``succeeded`` or ``failed``.
+
+        The work is dropped first: Qt keeps the finished runnable, and with it anything
+        the work captured (often whole images) would stay in memory.
+        """
+        work, self._work = self._work, None
+        if work is None:
+            return
         try:
-            result = self._work(self.signals.progress.emit)
+            result = work(self.signals.progress.emit)
         except Exception as exc:
             log.exception("Background task failed: %s", exc)
             self._emit(self.signals.failed, exc)
@@ -68,9 +75,19 @@ def start_task(
     _running.add(task)
     task.signals.succeeded.connect(on_success)
     task.signals.failed.connect(on_failure)
-    task.signals.succeeded.connect(lambda _result: _running.discard(task))
-    task.signals.failed.connect(lambda _error: _running.discard(task))
+    task.signals.succeeded.connect(lambda _result: _release(task))
+    task.signals.failed.connect(lambda _error: _release(task))
     if on_progress is not None:
         task.signals.progress.connect(on_progress)
     QThreadPool.globalInstance().start(task)
     return task
+
+
+def _release(task: Task) -> None:
+    """Forget a task whose outcome was delivered.
+
+    Deleting its signal object drops the connected handlers, which may hold the
+    caller's data and refer back to the task.
+    """
+    _running.discard(task)
+    task.signals.deleteLater()

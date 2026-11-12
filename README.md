@@ -139,7 +139,8 @@ The installer
 
 1. clones the repository to `~/PaperScan` (or uses the clone it runs from),
 2. finds Python 3.12/3.13 — through uv, the py launcher or PATH, and asks if there is none,
-3. closes a running PaperScan of that folder, creates `.venv` and installs the app with all extras,
+3. closes a running PaperScan of that folder on Windows (it asks first if pages are unsaved),
+   creates `.venv` and installs the app with all extras,
 4. adds a Start menu entry (with icon) and the `paperscan` command,
 5. offers to install the external tools (Tesseract + languages, cjpegli, adb),
 6. starts the app and keeps its window open for 10 seconds (any key closes it).

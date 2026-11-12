@@ -88,10 +88,10 @@ class CompareDialog(QDialog):
         self._buttons[0].setChecked(True)
         self._show_variant(0)
 
-    def render_failed(self, message: str) -> None:
+    def render_failed(self, error: Exception) -> None:
         """Report that the variants could not be rendered."""
         self._busy.hide()
-        self._status.setText(f"Rendering failed: {message}")
+        self._status.setText(f"Rendering failed: {error}")
 
     def renders(self) -> list[VariantRender]:
         """Return the renderings (empty while they are still being computed)."""
@@ -115,11 +115,11 @@ class CompareDialog(QDialog):
         self._show_variant(best_index)
         self._status.setText(f"AI recommends variant {rating.best}: {rating.reason}")
 
-    def rating_failed(self, message: str) -> None:
+    def rating_failed(self, error: Exception) -> None:
         """Re-enable the AI button after an error."""
         self._ask_ai.setEnabled(True)
         self._busy.hide()
-        self._status.setText(f"AI rating failed: {message}")
+        self._status.setText(f"AI rating failed: {error}")
 
     # --- Construction ---------------------------------------------------------------------------
 

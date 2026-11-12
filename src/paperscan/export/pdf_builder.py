@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from functools import cache
 from pathlib import Path
 
 import pymupdf
@@ -19,8 +20,10 @@ from paperscan.ocr.recognition import OcrPage
 PAGE_LONG_EDGE_PT = 841.89
 #: Invisible text render mode (PDF spec, "neither fill nor stroke").
 INVISIBLE_TEXT = 3
-#: Built-in Helvetica covers Latin-1, which includes German umlauts.
-TEXT_FONT = "helv"
+#: Fonts of the text layer, by PDF resource name, in order of preference (PyMuPDF built-ins).
+#: They are embedded (and subset on save), so every recognised character stays searchable:
+#: Helvetica covers Latin, Greek and Cyrillic, Droid Sans Fallback adds Chinese, Japanese and Korean.
+TEXT_FONTS = {"PSText": "helv", "PSTextCJK": "cjk"}
 #: Font size relative to the line box height; glyph boxes include ascenders and descenders.
 FONT_SIZE_PER_LINE_HEIGHT = 0.85
 #: Baseline position relative to the line box (from the top).
@@ -55,6 +58,7 @@ def build_pdf(pages: list[PdfPage], metadata: PdfMetadata, target: Path) -> None
     document = pymupdf.open()
     for page in pages:
         _add_page(document, page)
+    document.subset_fonts()
     document.set_metadata(_metadata_dict(metadata))
     target.parent.mkdir(parents=True, exist_ok=True)
     document.save(str(target), **SAVE_OPTIONS)
@@ -72,14 +76,34 @@ def _add_page(document: pymupdf.Document, page: PdfPage) -> None:
 
 def _add_text_layer(pdf_page: pymupdf.Page, ocr: OcrPage, scale: float) -> None:
     """Write every OCR line invisibly, horizontally stretched to the line's box."""
+    page_fonts: set[str] = set()
     for line in ocr.lines:
+        font_name = _font_for(line.text)
         font_size = max(1.0, line.height * scale * FONT_SIZE_PER_LINE_HEIGHT)
-        natural_width = pymupdf.get_text_length(line.text, fontname=TEXT_FONT, fontsize=font_size)
+        natural_width = _font(font_name).text_length(line.text, fontsize=font_size)
         if natural_width <= 0:
             continue
+        if font_name not in page_fonts:
+            pdf_page.insert_font(fontname=font_name, fontbuffer=_font(font_name).buffer)
+            page_fonts.add(font_name)
         origin = pymupdf.Point(line.left * scale, (line.top + line.height * BASELINE_SHARE) * scale)
         stretch = pymupdf.Matrix(line.width * scale / natural_width, 1)
-        pdf_page.insert_text(origin, line.text, fontname=TEXT_FONT, fontsize=font_size, render_mode=INVISIBLE_TEXT, morph=(origin, stretch))
+        pdf_page.insert_text(origin, line.text, fontname=font_name, fontsize=font_size, render_mode=INVISIBLE_TEXT, morph=(origin, stretch))
+
+
+def _font_for(text: str) -> str:
+    """Return the first text layer font that has a glyph for every character of ``text``."""
+    for font_name in TEXT_FONTS:
+        font = _font(font_name)
+        if all(font.has_glyph(ord(char)) for char in text if not char.isspace()):
+            return font_name
+    return next(iter(TEXT_FONTS))
+
+
+@cache
+def _font(font_name: str) -> pymupdf.Font:
+    """Return the loaded font behind the resource name ``font_name`` (loaded once)."""
+    return pymupdf.Font(TEXT_FONTS[font_name])
 
 
 def _metadata_dict(metadata: PdfMetadata) -> dict[str, str]:

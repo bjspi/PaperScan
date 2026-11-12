@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
+from paperscan.app_paths import partial_path
 from paperscan.capture.photo_files import PHOTO_EXTENSIONS, embedded_thumbnail, thumbnail_of_file
 from paperscan.platform_tools import Tool, require_tool, run_tool, run_tool_bytes
 
@@ -35,6 +36,8 @@ ADB_PULL_TIMEOUT = 120.0
 MEDIA_STORE_IMAGES = "content://media/external/images/media"
 #: Bytes read from the start of a photo for its EXIF thumbnail (phone thumbnails are 20–60 KB).
 PHOTO_HEAD_BYTES = 131072
+#: Modification time in local copy names (keeps photos with equal names apart).
+LOCAL_NAME_TIME_FORMAT = "%Y%m%d-%H%M%S"
 #: Device state reported by ``adb devices`` for usable devices.
 DEVICE_READY_STATE = "device"
 #: Timeout for connecting or pairing over Wi-Fi, in seconds.
@@ -92,6 +95,16 @@ class RemotePhoto:
     def name(self) -> str:
         """Return the file name."""
         return posixpath.basename(self.path)
+
+    @property
+    def local_name(self) -> str:
+        """Return the file name of the local copy, unique per photo.
+
+        Camera apps restart their numbering (after a reset, on another phone), so the
+        name alone may stand for different photos; time and size tell them apart.
+        """
+        stem, suffix = posixpath.splitext(self.name)
+        return f"{stem}_{self.modified:{LOCAL_NAME_TIME_FORMAT}}_{self.size}{suffix}"
 
 
 class AdbClient:
@@ -153,12 +166,21 @@ class AdbClient:
         return photos[:limit]
 
     def pull(self, photo: RemotePhoto, target_dir: Path) -> Path:
-        """Copy one photo to ``target_dir`` (kept if it already exists) and return its local path."""
+        """Copy one photo to ``target_dir`` (kept if it already exists) and return its local path.
+
+        The photo is downloaded under a temporary name and only renamed once complete, so an
+        interrupted copy is never mistaken for an imported photo.
+        """
         target_dir.mkdir(parents=True, exist_ok=True)
-        local = target_dir / photo.name
+        local = target_dir / photo.local_name
         if local.is_file() and local.stat().st_size == photo.size:
             return local
-        self._run(["pull", "-a", photo.path, str(local)], timeout=ADB_PULL_TIMEOUT)
+        partial = partial_path(local)
+        try:
+            self._run(["pull", "-a", photo.path, str(partial)], timeout=ADB_PULL_TIMEOUT)
+            partial.replace(local)
+        finally:
+            partial.unlink(missing_ok=True)
         log.info("Copied %s from the phone to %s", photo.name, local)
         return local
 

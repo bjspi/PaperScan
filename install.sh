@@ -90,12 +90,11 @@ create_environment() {
   "$python" -m venv .venv
 }
 
-stop_running_app() {
-  # Update cleanly: close a running instance of this installation first.
+note_running_app() {
+  # A running instance keeps working while it is updated (nothing is locked), and stopping it
+  # would lose its unsaved pages, so it is only reminded to restart.
   if pgrep -f "$PWD/.venv/bin/paperscan" >/dev/null 2>&1; then
-    echo "==> Closing the running $APP_NAME so it can be updated"
-    pkill -f "$PWD/.venv/bin/paperscan" || true
-    sleep 1
+    echo "==> $APP_NAME is running; restart it after the update to use the new version"
   fi
 }
 
@@ -118,7 +117,7 @@ main() {
   parse_arguments "$@"
   enter_project_folder
   create_environment
-  stop_running_app
+  note_running_app
   install_package
   add_command
   if [ "$SKIP_TOOLS" -eq 0 ]; then

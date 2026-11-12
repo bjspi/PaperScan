@@ -6,10 +6,12 @@ import threading
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pymupdf
 import pytest
 
+from paperscan import pipeline
 from paperscan.capture.adb_import import RemotePhoto
 from paperscan.export.naming import FileDateStyle
 from paperscan.imaging.filters import FilterMode, FilterSettings
@@ -39,6 +41,21 @@ def test_three_photos_become_one_dated_pdf(document_photo_file: Path, offline_se
 def test_export_can_be_cancelled(document_photo_file: Path, offline_settings: AppSettings) -> None:
     cancel = threading.Event()
     cancel.set()
+    with pytest.raises(ExportCancelledError):
+        prepare_export([open_page(document_photo_file, offline_settings)], offline_settings, cancel=cancel)
+
+
+def test_cancel_during_the_analysis_stops_the_export(
+    document_photo_file: Path, offline_settings: AppSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cancel = threading.Event()
+    real_analyse = pipeline._analyse
+
+    def analyse_then_cancel(*arguments: Any) -> Any:
+        cancel.set()  # the user clicks Cancel while the AI is still answering
+        return real_analyse(*arguments)
+
+    monkeypatch.setattr(pipeline, "_analyse", analyse_then_cancel)
     with pytest.raises(ExportCancelledError):
         prepare_export([open_page(document_photo_file, offline_settings)], offline_settings, cancel=cancel)
 

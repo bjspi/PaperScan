@@ -130,11 +130,15 @@ class _Progress:
 
     def step(self, message: str) -> None:
         """Announce the next step; raises :class:`ExportCancelledError` if cancelled."""
-        if self._cancel is not None and self._cancel.is_set():
-            raise ExportCancelledError("Export cancelled")
+        self.check_cancelled()
         if self._callback is not None:
             self._callback(message, self._done / self._total)
         self._done += 1
+
+    def check_cancelled(self) -> None:
+        """Raise :class:`ExportCancelledError` if the user cancelled (also after the last step)."""
+        if self._cancel is not None and self._cancel.is_set():
+            raise ExportCancelledError("Export cancelled")
 
 
 def prepare_export(
@@ -166,6 +170,7 @@ def prepare_export(
     capture_date = min(page.captured_at for page in pages).date()
     tracker.step("Analysing the document")
     analysis = _analyse(pdf_pages, ai_images, capture_date, settings)
+    tracker.check_cancelled()
     pages_out = tuple(_apply_corrections(pdf_pages, analysis))
     return ExportDraft(pages=pages_out, analysis=analysis, capture_date=capture_date, ai_images=tuple(ai_images))
 

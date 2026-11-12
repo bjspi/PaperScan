@@ -61,6 +61,7 @@ from paperscan.pipeline import (
     ExportCancelledError,
     ExportChoice,
     ExportDraft,
+    ScanPage,
     prepare_documents,
     reanalyse,
     suggested_choice,
@@ -112,6 +113,15 @@ class ToolbarEntry:
 
 
 @dataclass(frozen=True)
+class _ExportJob:
+    """The session's documents as an export started (pages may change while it runs)."""
+
+    documents: list[list[ScanPage]]
+    #: The phone photos behind each document, for deleting them once it is saved.
+    phone_photos: list[list[RemotePhoto]]
+
+
+@dataclass(frozen=True)
 class _PreviewResult:
     """A rendered preview tagged with the request it answers."""
 
@@ -138,6 +148,8 @@ class MainWindow(QMainWindow):
         self._final_shown = -1
         self._busy_jobs = 0
         self._cancel_export = threading.Event()
+        #: Documents as last saved completely; closing or starting over asks only if the pages differ.
+        self._saved_documents: list[list[ScanPage]] = []
         self._settings_window: SettingsWindow | None = None
         self._preview_timer = QTimer(self, singleShot=True, interval=PREVIEW_DEBOUNCE_MS)
         self._preview_timer.timeout.connect(self._render_current_preview)
@@ -517,10 +529,7 @@ class MainWindow(QMainWindow):
 
     def _new_document(self) -> None:
         """Start over with an empty document."""
-        if (
-            len(self._session)
-            and QMessageBox.question(self, "New document", "Discard the current pages?") != QMessageBox.StandardButton.Yes
-        ):
+        if not self._may_discard_pages("New document"):
             return
         self._session.clear()
         self._refresh_strip()
@@ -534,21 +543,20 @@ class MainWindow(QMainWindow):
         settings = self._settings
         variants = preset_variants()
         dialog = CompareDialog(variants, settings.ai.provider.enabled, self)
-        start_task(
-            lambda _progress: render_page_variants(page, variants),
-            dialog.show_renders,
-            lambda error: dialog.render_failed(str(error)),
-        )
-        dialog.rating_requested.connect(
-            lambda: start_task(
-                lambda _progress: rate_renders(dialog.renders(), settings),
-                dialog.show_rating,
-                lambda error: dialog.rating_failed(str(error)),
-            )
-        )
-        if not dialog.exec():
-            return
+        # Results go to the dialog's own methods: Qt drops them once the closed dialog is deleted.
+        start_task(lambda _progress: render_page_variants(page, variants), dialog.show_renders, dialog.render_failed)
+
+        def rate() -> None:
+            renders = dialog.renders()
+            start_task(lambda _progress: rate_renders(renders, settings), dialog.show_rating, dialog.rating_failed)
+
+        dialog.rating_requested.connect(rate)
+        accepted = dialog.exec()
         chosen = dialog.selected_variant()
+        # The renderings of all variants are large; free them instead of keeping the dialog as a child.
+        dialog.deleteLater()
+        if not accepted:
+            return
         self._session.set_filter(self._current, chosen.settings, only_this_page=False)
         self._filters.show_settings(chosen.settings, own_filter=False)
         self._set_status(f"Filter variant {chosen.number} ({chosen.name}) applied to all pages")
@@ -622,13 +630,21 @@ class MainWindow(QMainWindow):
         """Process every document in the background, then let the user review them together."""
         if not len(self._session):
             return
-        documents, settings = self._session.document_pages(), self._settings
+        job = _ExportJob(
+            documents=self._session.document_pages(),
+            phone_photos=[self._session.phone_photos(pages) for pages in self._session.document_ranges()],
+        )
+        settings = self._settings
         self._cancel_export.clear()
         self._cancel.show()
-        message = "Creating PDF …" if len(documents) == 1 else f"Creating {len(documents)} PDFs …"
-        self._run(message, lambda progress: prepare_documents(documents, settings, progress, self._cancel_export), self._review_export)
+        message = "Creating PDF …" if len(job.documents) == 1 else f"Creating {len(job.documents)} PDFs …"
+        self._run(
+            message,
+            lambda progress: prepare_documents(job.documents, settings, progress, self._cancel_export),
+            lambda drafts: self._review_export(job, drafts),
+        )
 
-    def _review_export(self, drafts: list[ExportDraft]) -> None:
+    def _review_export(self, job: _ExportJob, drafts: list[ExportDraft]) -> None:
         """Show every document's suggestion (AI on request) and write the PDFs once confirmed."""
         self._cancel.hide()
         settings = self._settings
@@ -641,7 +657,7 @@ class MainWindow(QMainWindow):
             style=settings.file_date_style,
             providers=providers,
             preferred=preferred,
-            phone_photo_count=len(self._session.phone_photos()),
+            phone_photo_count=len({photo.path for photos in job.phone_photos for photo in photos}),
             parent=self,
         )
         current = list(drafts)
@@ -664,10 +680,11 @@ class MainWindow(QMainWindow):
             self._set_status("Export cancelled")
             return
         saved = self._write_documents(current, dialog.choices(), dialog.output_dir(), open_after=dialog.open_after())
+        if len(saved) == len(job.documents):
+            self._saved_documents = job.documents
         self._remember_export_choices(dialog.output_dir(), open_after=dialog.open_after())
         if dialog.delete_from_phone():
-            ranges = self._session.document_ranges()
-            self._delete_phone_photos(self._session.phone_photos(page for index in saved for page in ranges[index]))
+            self._delete_phone_photos(_photos_of_saved_documents(job.phone_photos, saved))
 
     def _document_review(self, draft: ExportDraft) -> DocumentReview:
         """Return what the save dialog shows for one prepared document."""
@@ -709,6 +726,8 @@ class MainWindow(QMainWindow):
 
     def _delete_phone_photos(self, photos: list[RemotePhoto]) -> None:
         """Delete the imported photos from the phone after one more confirmation."""
+        if not photos:
+            return
         names = "\n".join(photo.name for photo in photos)
         answer = QMessageBox.question(
             self,
@@ -859,10 +878,34 @@ class MainWindow(QMainWindow):
         for key in ("phone", "files", "folder", "new"):
             self._actions[key].setEnabled(idle)
 
+    def _may_discard_pages(self, title: str) -> bool:
+        """Return whether the current pages may go: they are saved as they are, or the user agrees."""
+        if not len(self._session) or self._session.document_pages() == self._saved_documents:
+            return True
+        answer = QMessageBox.question(self, title, "The current pages have not been saved as PDF in their current state. Discard them?")
+        return answer == QMessageBox.StandardButton.Yes
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API
-        """Stop a running export before closing."""
+        """Ask before unsaved pages are lost, then stop a running export."""
+        if not self._may_discard_pages(APP_NAME):
+            event.ignore()
+            return
         self._cancel_export.set()
         super().closeEvent(event)
+
+
+def _photos_of_saved_documents(phone_photos: list[list[RemotePhoto]], saved: list[int]) -> list[RemotePhoto]:
+    """Return the phone photos that only belong to saved documents (in document order, each once).
+
+    A photo that also backs a document which was not saved stays on the phone.
+    """
+    kept = {photo.path for index, photos in enumerate(phone_photos) if index not in saved for photo in photos}
+    deletable: dict[str, RemotePhoto] = {}
+    for index in saved:
+        for photo in phone_photos[index]:
+            if photo.path not in kept:
+                deletable.setdefault(photo.path, photo)
+    return list(deletable.values())
 
 
 def _toolbar_brand() -> QWidget:

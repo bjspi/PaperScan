@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import uuid4
 
 APP_NAME = "PaperScan"
 APP_DATA_DIR = Path.home() / f".{APP_NAME}"
@@ -19,6 +20,8 @@ DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / APP_NAME
 BACKUP_EXCLUSION_MARKER = ".nobackup"
 #: Daily rotating log file.
 LOG_FILE = APP_DATA_DIR / "logs" / f"{APP_NAME}.log"
+#: Suffix of a file while it is being downloaded; it gets its final name only when complete.
+PARTIAL_SUFFIX = ".part"
 
 
 def make_reproducible_dir(path: Path) -> Path:
@@ -31,3 +34,11 @@ def make_reproducible_dir(path: Path) -> Path:
     if not marker.exists():
         marker.touch()
     return path
+
+
+def partial_path(target: Path) -> Path:
+    """Return where ``target`` is written until it is complete (see :data:`PARTIAL_SUFFIX`).
+
+    The name is unique per call, so two transfers of the same file never share it.
+    """
+    return target.with_name(f"{target.name}.{uuid4().hex}{PARTIAL_SUFFIX}")
