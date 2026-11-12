@@ -1,7 +1,8 @@
 name: Release
 
 # Push an annotated tag vX.Y.Z whose message holds the release notes:
-#   git tag -a v0.2.2 -F notes.md && git push origin v0.2.2
+#   git tag -a v0.2.3 --cleanup=verbatim -F notes.md && git push origin v0.2.3
+# (--cleanup=verbatim keeps Markdown headings; git would strip lines starting with "#").
 # The full CI runs first; the release is only created if it passes.
 on:
   push:

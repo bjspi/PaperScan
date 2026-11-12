@@ -189,4 +189,5 @@ No test needs Tesseract, adb, a model, network or personal data.
   `main` and on pull requests.
 * `.github/workflows/release.yml` — on an annotated tag `vX.Y.Z`: runs the same CI, checks that the
   tag matches `paperscan.__version__`, builds wheel and sdist and publishes a GitHub release whose
-  notes are the tag message. The version lives only in `src/paperscan/__init__.py`.
+  notes are the tag message (create it with `git tag -a --cleanup=verbatim -F notes.md` so Markdown
+  headings survive). The version lives only in `src/paperscan/__init__.py`.
