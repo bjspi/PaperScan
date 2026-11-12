@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import numpy as np
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPixmap
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -128,6 +128,9 @@ class PhoneDialog(QDialog):
             item.setCheckState(Qt.CheckState.Unchecked)
             grid.addItem(item)
         grid.itemClicked.connect(self._toggle)
+        # The space bar ticks the current tile, as it did while Qt handled the box itself.
+        space = QShortcut(QKeySequence(Qt.Key.Key_Space), grid, context=Qt.ShortcutContext.WidgetShortcut)
+        space.activated.connect(self._toggle_current)
         return grid
 
     def _build_footer(self) -> QHBoxLayout:
@@ -165,6 +168,12 @@ class PhoneDialog(QDialog):
         checked = item.checkState() != Qt.CheckState.Checked
         item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
         item.setSelected(checked)
+
+    def _toggle_current(self) -> None:
+        """Tick or untick the tile with the keyboard focus."""
+        item = self._list.currentItem()
+        if item is not None:
+            self._toggle(item)
 
     def _update_count(self) -> None:
         """Show how many photos are ticked and enable the import button."""
