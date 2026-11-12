@@ -26,7 +26,7 @@ control over cropping, filters, compression, OCR and file names, and everything 
 | R9  | AI analysis via OpenAI API, local Claude Code CLI or local Codex CLI: title, document date (e.g. invoice date, else capture date), short summary, keywords. Optional AI correction of the OCR text, positions stay Tesseract's. |
 | R10 | File name `YYYY-MM-DD Title.pdf`, at most 200 characters, user can edit before saving. |
 | R11 | All settings persist (output folder, max edge, JPEG, filters, OCR, AI, phone). |
-| R12 | GUI in the style of WhisperTyper (settings window with sidebar pages and setting rows); PySide6. |
+| R12 | Clean, modern GUI (settings window with sidebar pages and setting rows); PySide6. |
 | R13 | Complete rich-click CLI with ASCII header, JSON output for scripts and agents. |
 | R14 | Runs on Windows and macOS. |
 | R15 | Public repository quality: clean layered, domain-driven architecture; no credentials, no personal data, no third-party assets in Git. |
@@ -112,7 +112,7 @@ flowchart LR
 * **Compare dialog**: opens at once, fills in eight presets, AI rating, apply to the document.
 * **Save dialog**: AI suggestion (automatic or *Ask AI*), title, date, editable file name,
   summary, remembered folder, *open after saving*, *delete from phone*.
-* **Settings window** (WhisperTyper style, sidebar, cards, switches): General, Phone, Image &
+* **Settings window** (sidebar, cards, switches): General, Phone, Image &
   JPEG, Text recognition, AI, Tools.
 * Light/dark theme following the system; Fusion style on every platform; splash screen and icon.
 

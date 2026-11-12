@@ -1,4 +1,4 @@
-"""Settings window in the WhisperTyper layout: sidebar navigation, page header, cards of setting rows.
+"""Settings window: sidebar navigation, page header, cards of setting rows.
 
 Every row is declared once in :data:`PAGES` as a :class:`SettingField` bound to a
 dotted settings path; widgets are created, loaded and read back generically.

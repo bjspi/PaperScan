@@ -1,4 +1,4 @@
-"""Light and dark theme in the WhisperTyper look (same palette and component styling)."""
+"""Light and dark theme: palette and component styling."""
 
 from __future__ import annotations
 

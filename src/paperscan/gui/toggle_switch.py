@@ -1,4 +1,4 @@
-"""An on/off switch drawn with QPainter, used instead of checkboxes (WhisperTyper look)."""
+"""An on/off switch drawn with QPainter, used instead of checkboxes."""
 
 from __future__ import annotations
 

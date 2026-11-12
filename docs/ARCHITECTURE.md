@@ -98,7 +98,7 @@ level and degrade gracefully when missing; there are no function-local imports.
 | `gui/settings_window.py` | Sidebar settings declared as data (`SettingsPage` → `SettingsSection` → `SettingField`). |
 | `gui/setup_panel.py` | Tool status badges and one-click installation. |
 | `gui/setting_rows.py`, `toggle_switch.py`, `number_field.py`, `line_icons.py`, `image_view.py`, `images.py` | Reusable widgets and helpers. |
-| `gui/theme.py` | Light/dark palettes and the style sheet (WhisperTyper look). |
+| `gui/theme.py` | Light/dark palettes and the style sheet. |
 | `gui/tasks.py` | Thread-pool tasks that report back through signals. |
 
 ### Presentation (CLI)

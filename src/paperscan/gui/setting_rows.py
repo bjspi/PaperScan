@@ -1,4 +1,4 @@
-"""Building blocks of the settings pages: cards with divided rows, as in WhisperTyper.
+"""Building blocks of the settings pages: cards with divided rows.
 
 A row shows a bold title and a muted description on the left and its control
 right-aligned in a fixed-width column, so every page lines up.
