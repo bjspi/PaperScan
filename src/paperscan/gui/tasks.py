@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from concurrent.futures import CancelledError
 from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, SignalInstance
@@ -48,6 +49,10 @@ class Task(QRunnable):
             return
         try:
             result = work(self.signals.progress.emit)
+        except CancelledError as exc:  # the user stopped it: worth a line, not a traceback
+            log.info("Background task cancelled: %s", exc)
+            self._emit(self.signals.failed, exc)
+            return
         except Exception as exc:
             log.exception("Background task failed: %s", exc)
             self._emit(self.signals.failed, exc)

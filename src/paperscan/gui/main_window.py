@@ -296,7 +296,7 @@ class MainWindow(QMainWindow):
         self._cancel = QPushButton("Cancel")
         self._cancel.setObjectName("link")
         self._cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._cancel.clicked.connect(self._cancel_export.set)
+        self._cancel.clicked.connect(self._request_cancel)
         self._cancel.hide()
         bar = self.statusBar()
         bar.setSizeGripEnabled(False)
@@ -656,6 +656,7 @@ class MainWindow(QMainWindow):
         )
         settings = self._settings
         self._cancel_export.clear()
+        self._cancel.setEnabled(True)
         self._cancel.show()
         message = "Creating PDF …" if len(job.documents) == 1 else f"Creating {len(job.documents)} PDFs …"
         self._run(
@@ -663,6 +664,12 @@ class MainWindow(QMainWindow):
             lambda progress: prepare_documents(job.documents, settings, progress, self._cancel_export),
             lambda drafts: self._review_export(job, drafts),
         )
+
+    def _request_cancel(self) -> None:
+        """Stop the running export; the status shows at once that the click arrived."""
+        self._cancel_export.set()
+        self._cancel.setEnabled(False)
+        self._set_status("Cancelling …")
 
     def _review_export(self, job: _ExportJob, drafts: list[ExportDraft]) -> None:
         """Show every document's suggestion (AI on request) and write the PDFs once confirmed."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -58,6 +59,25 @@ def test_cancel_during_the_analysis_stops_the_export(
     monkeypatch.setattr(pipeline, "_analyse", analyse_then_cancel)
     with pytest.raises(ExportCancelledError):
         prepare_export([open_page(document_photo_file, offline_settings)], offline_settings, cancel=cancel)
+
+
+def test_cancel_does_not_wait_for_a_slow_analysis(
+    document_photo_file: Path, offline_settings: AppSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cancel = threading.Event()
+    answer = threading.Event()
+
+    def slow_analysis(*_arguments: Any) -> Any:
+        cancel.set()  # the user clicks Cancel while the AI takes its time
+        answer.wait(timeout=10)
+        raise AssertionError("the analysis result must not be needed")
+
+    monkeypatch.setattr(pipeline, "_analyse", slow_analysis)
+    started = time.perf_counter()
+    with pytest.raises(ExportCancelledError):
+        prepare_export([open_page(document_photo_file, offline_settings)], offline_settings, cancel=cancel)
+    assert time.perf_counter() - started < 5
+    answer.set()
 
 
 def test_session_shared_and_page_filters(document_photo_file: Path, offline_settings: AppSettings) -> None:

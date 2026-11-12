@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from concurrent.futures import CancelledError, Future
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
@@ -36,12 +37,15 @@ from paperscan.settings import AppSettings
 
 log = logging.getLogger(__name__)
 
+#: How often a step that cannot be interrupted checks whether the user cancelled, in seconds.
+CANCEL_POLL_SECONDS = 0.2
+
 #: (message, fraction done 0..1)
 ProgressCallback = Callable[[str, float], None]
 
 
-class ExportCancelledError(RuntimeError):
-    """Raised when the user cancels a running export."""
+class ExportCancelledError(CancelledError):
+    """Raised when the user cancels a running export (a decision, not a failure)."""
 
 
 # --- Pages -------------------------------------------------------------------------------------
@@ -141,6 +145,29 @@ class _Progress:
         if self._cancel is not None and self._cancel.is_set():
             raise ExportCancelledError("Export cancelled")
 
+    def wait_for[T](self, work: Callable[[], T]) -> T:
+        """Return the result of ``work``, or raise :class:`ExportCancelledError` as soon as the user cancels.
+
+        ``work`` (an AI request of half a minute) cannot be interrupted, so it runs in a helper
+        thread; after a cancel it finishes there and its result is discarded.
+        """
+        if self._cancel is None:
+            return work()
+        result: Future[T] = Future()
+
+        def run() -> None:
+            try:
+                result.set_result(work())
+            except Exception as exc:  # noqa: BLE001 - handed to the waiting caller, which re-raises it
+                result.set_exception(exc)
+
+        threading.Thread(target=run, name="paperscan-analysis", daemon=True).start()
+        while True:
+            try:
+                return result.result(timeout=CANCEL_POLL_SECONDS)
+            except TimeoutError:
+                self.check_cancelled()
+
 
 def prepare_export(
     pages: list[ScanPage], settings: AppSettings, progress: ProgressCallback | None = None, cancel: threading.Event | None = None
@@ -172,7 +199,7 @@ def prepare_export(
         pdf_pages.append(PdfPage(jpeg=jpeg, width=rendered.shape[1], height=rendered.shape[0], ocr=ocr))
     capture_date = min(page.captured_at for page in pages).date()
     tracker.step(_analysis_step(settings))
-    analysis = _analyse(pdf_pages, ai_images, capture_date, settings)
+    analysis = tracker.wait_for(lambda: _analyse(pdf_pages, ai_images, capture_date, settings))
     tracker.check_cancelled()
     pages_out = tuple(_apply_corrections(pdf_pages, analysis))
     return ExportDraft(pages=pages_out, analysis=analysis, capture_date=capture_date, ai_images=tuple(ai_images))
