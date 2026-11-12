@@ -13,7 +13,7 @@ flowchart TB
   end
   subgraph Application
     PIPE["pipeline.py — two-phase export workflow"]
-    SES["session.py — pages of the document being edited"]
+    SES["session.py — pages being edited, split into documents"]
     CMP["comparison.py — render and rate filter variants"]
     SET["settings.py — persisted, typed settings"]
   end
@@ -75,8 +75,8 @@ level and degrade gracefully when missing; there are no function-local imports.
 
 | Module | Responsibility |
 | --- | --- |
-| `pipeline.py` | `open_page`, `flatten_page`, `render_page`; `prepare_export` → `ExportDraft` → `write_export`; `reanalyse` for AI on demand; `choice_for` builds names. |
-| `session.py` | `DocumentSession`: ordered pages, shared vs. per-page filter, rotation, phone origins; quick and final-quality previews with a small full-photo cache. |
+| `pipeline.py` | `open_page`, `flatten_page`, `render_page`; `prepare_export` → `ExportDraft` → `write_export`; `prepare_documents` runs several documents with one progress; `reanalyse` for AI on demand; `choice_for` builds names. |
+| `session.py` | `DocumentSession`: ordered pages split into documents (runs of pages with the same document id: split, join, split at capture pauses; a moved page joins the document it is dropped on), shared vs. per-page filter, rotation, phone origins; quick and final-quality previews with a small full-photo cache. |
 | `comparison.py` | Flattens a page once, renders all variants, rates them, writes files and the overview. |
 | `settings.py` | `AppSettings` and sections, `ColorTheme`; JSON store; `normalized`, dotted get/set. |
 
@@ -86,13 +86,13 @@ level and degrade gracefully when missing; there are no function-local imports.
 | --- | --- |
 | `gui/app.py` | Starts Qt (Fusion style, app icon, Windows taskbar identity, splash screen). |
 | `gui/main_window.py` | Composition root of the GUI: wires panels to the session and runs background jobs. |
-| `gui/page_strip.py` | Thumbnail column; drag to reorder; right-click menu. |
+| `gui/page_strip.py` | Thumbnail column with document headers; drag to reorder; right-click menu. |
 | `gui/page_toolbar.py` | `PageAction`s for the current page: icon bar above the editor, shortcuts, context menu. |
 | `gui/corner_editor.py` | Draggable corners and edges, magnifier fed by the full-resolution photo. |
 | `gui/filter_panel.py` | Presets, mode buttons, gray switch, fine-tuning sliders, page scope. |
 | `gui/output_panel.py` | Longest page edge and JPEG quality, saved immediately. |
 | `gui/workflow_panel.py` | OCR and AI status, page count, the Create PDF button. |
-| `gui/export_dialog.py` | Review dialog: AI on demand, title, date, editable file name, folder, phone deletion. |
+| `gui/export_dialog.py` | Review dialog for one or several documents (list plus one `DocumentForm` each): AI on demand, title, date, editable file name; shared folder, open after saving, phone deletion. |
 | `gui/compare_dialog.py` | Variant grid that opens at once and fills in when rendering finishes. |
 | `gui/phone_dialog.py` | Phone photo grid with lazily loaded EXIF thumbnails and series preselection. |
 | `gui/phone_connection.py` | Connection check and Wi-Fi pairing on the phone settings page; search dialog that retries until a phone appears. |
@@ -173,6 +173,8 @@ points to the log file.
 * `tests/test_documents.py` — OCR parsing and the TSV guard, AI answer parsing, file names and
   date styles, PDF text layer positions, settings persistence, ADB parsing, backup markers.
 * `tests/test_variants.py` — presets, sweeps, text conversion round trip, overview, rating.
+* `tests/test_multiple_documents.py` — split, join, moves across documents, split at pauses,
+  phone photos per document, one draft per document, strip headers, one choice per document.
 * `tests/test_workflow.py` — behaviour: photos → one PDF, cancellation, shared vs. per-page
   filters, reordering and rotation, phone photos marked for deletion.
 * `tests/test_phone_connection.py` — phone choice: USB before Wi-Fi, mDNS fallback, configured

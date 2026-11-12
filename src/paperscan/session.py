@@ -1,15 +1,20 @@
-"""Editing session: the pages of the document being prepared.
+"""Editing session: the pages being prepared, split into one or more documents.
 
-A session is one document. Pages share one filter by default (the usual case:
-five photos of a heating bill, all treated the same); a page can opt out with
-its own filter. Each page keeps a downscaled copy of its photo so previews
-render fast; the full photo is only reloaded for the export.
+Usually a session is one document (five photos of a heating bill). The user can
+start a new document at any page, so one import can become several PDFs; each
+document is a run of neighbouring pages. Pages share one filter by default (all
+treated the same); a page can opt out with its own filter. Each page keeps a
+downscaled copy of its photo so previews render fast; the full photo is only
+reloaded for the export.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from functools import lru_cache
+from itertools import groupby
 from pathlib import Path
 
 import numpy as np
@@ -37,6 +42,8 @@ class SessionPage:
         preview_rgb: Downscaled photo for the editor and previews.
         own_filter: True if this page does not follow the shared filter.
         remote: Phone photo the page was imported from (for deleting it after export).
+        document: Id of the document the page belongs to; neighbouring pages with the
+            same id form one document.
     """
 
     page: ScanPage
@@ -44,6 +51,7 @@ class SessionPage:
     own_filter: bool = False
     #: The photo on the phone this page was imported from, if any.
     remote: RemotePhoto | None = None
+    document: int = 0
 
     @property
     def preview_scale(self) -> float:
@@ -84,12 +92,13 @@ def render_preview(entry: SessionPage, max_edge: int | None = None) -> np.ndarra
 
 
 class DocumentSession:
-    """Ordered pages plus the shared filter of the document being prepared."""
+    """Ordered pages, their split into documents, and the shared filter."""
 
     def __init__(self, shared_filter: FilterSettings) -> None:
-        """Start an empty document whose pages use ``shared_filter``."""
+        """Start an empty session whose pages use ``shared_filter``."""
         self.shared_filter = shared_filter
         self._pages: list[SessionPage] = []
+        self._last_document_id = 0
 
     @property
     def pages(self) -> list[SessionPage]:
@@ -104,25 +113,79 @@ class DocumentSession:
         """Return the page at ``index``."""
         return self._pages[index]
 
-    def phone_photos(self) -> list[RemotePhoto]:
-        """Return the distinct phone photos the pages were imported from."""
+    def phone_photos(self, indices: Iterable[int] | None = None) -> list[RemotePhoto]:
+        """Return the distinct phone photos of the pages at ``indices`` (default: all pages)."""
+        entries = self._pages if indices is None else [self._pages[index] for index in indices]
         photos: dict[str, RemotePhoto] = {}
-        for entry in self._pages:
+        for entry in entries:
             if entry.remote is not None:
                 photos.setdefault(entry.remote.path, entry.remote)
         return list(photos.values())
 
     def scan_pages(self) -> list[ScanPage]:
-        """Return the pipeline pages in document order."""
+        """Return the pipeline pages in page order."""
         return [entry.page for entry in self._pages]
 
+    # --- Documents ------------------------------------------------------------------------------
+
+    def document_ranges(self) -> list[range]:
+        """Return the page indices of each document, in page order."""
+        ranges: list[range] = []
+        start = 0
+        for _document, entries in groupby(self._pages, key=lambda entry: entry.document):
+            end = start + len(list(entries))
+            ranges.append(range(start, end))
+            start = end
+        return ranges
+
+    def document_pages(self) -> list[list[ScanPage]]:
+        """Return the pipeline pages of each document."""
+        return [[self._pages[index].page for index in pages] for pages in self.document_ranges()]
+
+    def starts_document(self, index: int) -> bool:
+        """Return whether the page at ``index`` begins a document other than the first."""
+        return 0 < index < len(self._pages) and self._pages[index].document != self._pages[index - 1].document
+
+    def split_before(self, index: int) -> None:
+        """Start a new document at page ``index``; the following pages of its document move along."""
+        if index <= 0 or self.starts_document(index):
+            return
+        old, new = self._pages[index].document, self._new_document_id()
+        for position in range(index, len(self._pages)):
+            if self._pages[position].document != old:
+                break
+            self._pages[position] = replace(self._pages[position], document=new)
+
+    def join_with_previous(self, index: int) -> None:
+        """Merge the document containing page ``index`` into the document before it."""
+        pages = next(pages for pages in self.document_ranges() if index in pages)
+        if pages.start == 0:
+            return
+        previous = self._pages[pages.start - 1].document
+        for position in pages:
+            self._pages[position] = replace(self._pages[position], document=previous)
+
+    def split_at_pauses(self, gap: timedelta) -> int:
+        """Start a new document wherever neighbouring photos were taken more than ``gap`` apart.
+
+        Returns the number of documents afterwards.
+        """
+        for index in range(1, len(self._pages)):
+            pause = abs(self._pages[index].page.captured_at - self._pages[index - 1].page.captured_at)
+            if pause > gap:
+                self.split_before(index)
+        return len(self.document_ranges())
+
+    # --- Pages ----------------------------------------------------------------------------------
+
     def add(self, entry: SessionPage) -> int:
-        """Append a page (it adopts the shared filter) and return its index."""
-        self._pages.append(self._with_filter(entry, self.shared_filter))
+        """Append a page to the last document (it adopts the shared filter) and return its index."""
+        document = self._pages[-1].document if self._pages else self._last_document_id
+        self._pages.append(replace(self._with_filter(entry, self.shared_filter), document=document))
         return len(self._pages) - 1
 
     def remove(self, index: int) -> None:
-        """Remove the page at ``index``."""
+        """Remove the page at ``index`` (a document without pages disappears)."""
         del self._pages[index]
 
     def clear(self) -> None:
@@ -130,8 +193,14 @@ class DocumentSession:
         self._pages.clear()
 
     def move(self, source: int, target: int) -> None:
-        """Move the page at ``source`` to position ``target``."""
-        self._pages.insert(target, self._pages.pop(source))
+        """Move the page at ``source`` to position ``target``.
+
+        The page joins the document of the page it was dropped on, so documents stay
+        runs of neighbouring pages.
+        """
+        document = self._pages[target].document
+        moved = self._pages.pop(source)
+        self._pages.insert(target, replace(moved, document=document))
 
     def set_quad(self, index: int, quad: Quad) -> None:
         """Set the page outline (source pixel coordinates)."""
@@ -168,6 +237,11 @@ class DocumentSession:
     def follow_shared_filter(self, index: int) -> None:
         """Make the page use the shared filter again."""
         self._pages[index] = replace(self._with_filter(self._pages[index], self.shared_filter), own_filter=False)
+
+    def _new_document_id(self) -> int:
+        """Return an id no page uses yet."""
+        self._last_document_id += 1
+        return self._last_document_id
 
     def _update_edit(self, index: int, **changes: object) -> None:
         """Replace fields of the page's edit."""

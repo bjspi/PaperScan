@@ -9,7 +9,8 @@ from PySide6.QtWidgets import QGridLayout, QGroupBox, QLabel, QPushButton, QVBox
 
 from paperscan.gui.theme import set_style_state
 
-CREATE_TEXT = "✓  Create PDF"
+CREATE_MARK = "✓"
+CREATE_TEXT = f"{CREATE_MARK}  Create PDF"
 #: Style property that colours a capability line (see theme).
 CAPABILITY_STATE = "capability"
 
@@ -45,14 +46,17 @@ class WorkflowPanel(QGroupBox):
         status.setColumnStretch(1, 1)
         self._create = QPushButton(CREATE_TEXT)
         self._create.setObjectName("create")
-        self._create.setToolTip("Process all pages, review title and date, then save the PDF (Ctrl+S).")
+        self._create.setToolTip(
+            "Process all pages, review title and date, then save the PDF (Ctrl+S).\n"
+            "Right-click a page to start a new document there: each document becomes its own PDF."
+        )
         self._create.clicked.connect(self.create_requested)
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
         layout.addLayout(status)
         layout.addWidget(self._pages)
         layout.addWidget(self._create)
-        self.show_state(page_count=0, busy=False)
+        self.show_state(page_count=0, document_count=0, busy=False)
 
     def show_capabilities(self, ocr: Capability, ai: Capability) -> None:
         """Show whether OCR and AI naming will run."""
@@ -60,13 +64,17 @@ class WorkflowPanel(QGroupBox):
             label.setText(f"{'✓' if capability.ready else '–'}  {capability.text}")
             set_style_state(label, CAPABILITY_STATE, "ok" if capability.ready else "off")
 
-    def show_state(self, *, page_count: int, busy: bool) -> None:
-        """Update the page summary and whether the button can be used."""
+    def show_state(self, *, page_count: int, document_count: int, busy: bool) -> None:
+        """Update the page summary, the button text and whether the button can be used."""
+        pages = f"{page_count} page{'s' if page_count != 1 else ''}"
         if busy:
             summary = "Working …"
+        elif document_count > 1:
+            summary = f"{pages} in {document_count} documents ready."
         elif page_count:
-            summary = f"{page_count} page{'s' if page_count != 1 else ''} ready."
+            summary = f"{pages} ready."
         else:
             summary = "Add photos to start a document."
         self._pages.setText(summary)
+        self._create.setText(CREATE_TEXT if document_count <= 1 else f"{CREATE_MARK}  Create {document_count} PDFs")
         self._create.setEnabled(page_count > 0 and not busy)

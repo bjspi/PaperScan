@@ -16,7 +16,7 @@ control over cropping, filters, compression, OCR and file names, and everything 
 | ID  | Requirement |
 | --- | --- |
 | R1  | Import the newest camera photos from an Android phone over ADB (photos stay on the phone), by USB or — as a fallback — Wireless debugging. Local files work too. |
-| R2  | Several photos form **one document** (one PDF); a single photo is just the one-page case. All pages share one filter setting by default. |
+| R2  | Several photos form **one document** (one PDF); a single photo is just the one-page case. All pages share one filter setting by default. One import can also be split into several documents (right-click: new document here, or split at capture pauses); every document becomes its own PDF, reviewed together in one save dialog. |
 | R3  | Automatic page border detection that copes with real backgrounds; the user can correct every corner by hand. |
 | R4  | Adaptive enhancement that copes with sun, shadows and folds (local background estimation). |
 | R5  | Filters Original, Photo, Document, Clear and Black & white; colour/gray; all thresholds exposed as sliders. |
@@ -100,7 +100,8 @@ flowchart LR
 * **Main window**
   * Header bar (app icon and name) with icons: *From phone*, *Add photos*, *Add folder*,
     *Compare filters*; *New document* and *Settings* set apart on the right.
-  * Left: page strip with thumbnails, drag & drop to reorder, right-click menu.
+  * Left: page strip with thumbnails and document headers, drag & drop to reorder, right-click menu
+    (page actions, new document here, join with previous, split at pauses).
   * Centre (40 %): page actions above the photo (rotate, detect edges, whole photo, remove),
     corner editor with draggable corners and edges and a magnifier.
   * Centre (60 %): the page exactly as exported (quick preview first, then from the original).
@@ -136,15 +137,17 @@ paperscan doctor
 | 2 | Application: settings store, two-phase pipeline, session, comparison | done |
 | 3 | CLI with banner: scan, compare, phone, setup, doctor, model, config | done |
 | 4 | GUI: main window, corner editor (edges + magnifier), filter/output/workflow panels, phone, compare, save and settings dialogs, theme, icons | done |
-| 5 | Quality gate: ruff, mypy, 61 tests (domain, settings, workflow, GUI settings typing) | done |
+| 5 | Quality gate: ruff, mypy, 79 tests (domain, settings, workflow, phone connection, multiple documents, GUI) | done |
 | 6 | Docs: README with screenshots, ARCHITECTURE, PLAN | done |
 | 7 | Setup assistant (`setup`, Tools page) and installers (`install.ps1`, `install.sh`) | done (Windows tested) |
 | 8 | Filter comparison: `compare`, `--variant/--set/--auto-filter`, GUI dialog, AI rating | done |
 | 9 | AI naming on demand, editable file names with date style, phone deletion, rotating log | done |
-| 10 | First commit, GitHub repository, CI (ruff, mypy, pytest on Windows and macOS), release tags | open |
+| 10 | First commit, GitHub repository, CI (ruff, mypy, pytest on Windows and macOS), release tags | done |
 | 11 | macOS test run of GUI, installer and setup assistant on a real Mac | open |
 | 12 | Hands-on check of edge dragging, magnifier and `scan --auto-filter` | open |
 | 13 | Optional page-curl dewarping for bent pages and book spreads (e.g. a UVDoc/DocTr-style model, imported like the corner model). Perspective correction exists; phone cameras already correct lens distortion. | open |
+| 14 | Wi-Fi fallback for the phone (Wireless debugging, pairing, search dialog that retries) | done (0.2.0) |
+| 15 | Several documents from one import: split in the page strip, one save dialog for all PDFs | done (0.2.1) |
 
 ## 8. Risks and open points
 

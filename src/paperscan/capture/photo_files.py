@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import io
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +45,10 @@ def load_photo(path: Path) -> np.ndarray:
     """Load a photo as an upright RGB array (EXIF orientation applied)."""
     with Image.open(path) as image:
         return np.asarray(ImageOps.exif_transpose(image).convert("RGB"))
+
+
+#: Photos taken further apart than this belong to different series (likely different documents).
+SERIES_GAP = timedelta(minutes=10)
 
 
 def capture_time(path: Path) -> datetime:

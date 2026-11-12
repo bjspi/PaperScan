@@ -58,6 +58,8 @@ document itself. No scanner app, no cloud scanner service, no copying files arou
 
 - 📱 **Phone, files or folders** — the newest camera photos over USB (ADB) with thumbnails, or over
   Wi-Fi (Wireless debugging) when no cable is plugged in; single files, whole folders or drag & drop. Several photos form one document; one photo works too.
+- 🗂️ **Several documents in one go** — import a whole stack, right-click a page to start the next
+  document there (or split where photos were taken minutes apart), and save all PDFs from one dialog.
 - 📐 **Finds the page** — neural border detection (optional) refined by OpenCV, perspective
   correction, corners *and* whole edges draggable, with a magnifier for pixel-exact corners.
 - ☀️ **Adaptive cleanup** — paper turns white under sun, shadows and folds because the paper
@@ -176,7 +178,7 @@ Start it from the Start menu, or with `paperscan`.
 | Area | What you do there |
 | --- | --- |
 | Header | *From phone*, *Add photos*, *Add folder* (or drop files), *Compare filters*; on the right *New document*, *Settings* |
-| Page strip | Thumbnails of all pages; drag to reorder, right-click for page actions |
+| Page strip | Thumbnails of all pages; drag to reorder, right-click for page actions and to start a new document (each document becomes its own PDF) |
 | Page actions | Above the photo: rotate left/right (Ctrl+L / Ctrl+R), detect edges again (Ctrl+D), whole photo (Ctrl+Shift+D), remove page (Del) |
 | Left view | The photo with the detected outline — drag corners or whole edges; a magnifier shows the spot |
 | Right view | The page exactly as it will be exported |

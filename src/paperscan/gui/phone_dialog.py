@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import timedelta
 
 import numpy as np
 from PySide6.QtCore import QSize, Qt
@@ -22,11 +21,10 @@ from PySide6.QtWidgets import (
 )
 
 from paperscan.capture.adb_import import RemotePhoto
+from paperscan.capture.photo_files import SERIES_GAP
 from paperscan.gui.images import image_to_pixmap, to_qimage
 from paperscan.gui.tasks import start_task
 
-#: Photos taken within this gap of each other are preselected as one document.
-SERIES_GAP = timedelta(minutes=10)
 BYTES_PER_MB = 1_048_576
 THUMBNAIL_SIZE = QSize(150, 200)
 GRID_SIZE = QSize(176, 258)

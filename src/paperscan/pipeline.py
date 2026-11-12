@@ -170,6 +170,31 @@ def prepare_export(
     return ExportDraft(pages=pages_out, analysis=analysis, capture_date=capture_date, ai_images=tuple(ai_images))
 
 
+def prepare_documents(
+    documents: list[list[ScanPage]],
+    settings: AppSettings,
+    progress: ProgressCallback | None = None,
+    cancel: threading.Event | None = None,
+) -> list[ExportDraft]:
+    """Prepare several documents one after another (see :func:`prepare_export`); progress spans all of them."""
+    return [
+        prepare_export(pages, settings, _document_progress(progress, number, len(documents)), cancel)
+        for number, pages in enumerate(documents, start=1)
+    ]
+
+
+def _document_progress(progress: ProgressCallback | None, number: int, total: int) -> ProgressCallback | None:
+    """Map one document's progress onto the whole run and name the document when there are several."""
+    if progress is None or total == 1:
+        return progress
+    report = progress
+
+    def scaled(message: str, fraction: float) -> None:
+        report(f"Document {number}/{total} · {message}", (number - 1 + fraction) / total)
+
+    return scaled
+
+
 def reanalyse(draft: ExportDraft, settings: AppSettings) -> ExportDraft:
     """Ask the configured AI again for an already prepared document (e.g. from the review dialog)."""
     analysis = _analyse(list(draft.pages), list(draft.ai_images), draft.capture_date, settings)

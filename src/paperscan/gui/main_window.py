@@ -35,11 +35,11 @@ from PySide6.QtWidgets import (
 from paperscan.analysis.vision import AnalysisProvider, available_providers
 from paperscan.app_paths import APP_NAME, LOG_FILE
 from paperscan.capture.adb_import import AdbError, RemotePhoto
-from paperscan.capture.photo_files import is_photo, photos_in_folder
+from paperscan.capture.photo_files import SERIES_GAP, is_photo, photos_in_folder
 from paperscan.comparison import rate_renders, render_page_variants
 from paperscan.gui.compare_dialog import CompareDialog
 from paperscan.gui.corner_editor import CornerEditor
-from paperscan.gui.export_dialog import PROVIDER_LABELS, ExportDialog
+from paperscan.gui.export_dialog import PROVIDER_LABELS, DocumentReview, ExportDialog
 from paperscan.gui.filter_panel import FilterPanel
 from paperscan.gui.image_view import ImageView
 from paperscan.gui.images import image_to_pixmap, to_qimage
@@ -57,7 +57,15 @@ from paperscan.gui.workflow_panel import Capability, WorkflowPanel
 from paperscan.imaging.filter_variants import preset_variants
 from paperscan.imaging.filters import FilterSettings
 from paperscan.imaging.geometry import Quad
-from paperscan.pipeline import ExportCancelledError, ExportDraft, prepare_export, reanalyse, suggested_choice, write_export
+from paperscan.pipeline import (
+    ExportCancelledError,
+    ExportChoice,
+    ExportDraft,
+    prepare_documents,
+    reanalyse,
+    suggested_choice,
+    write_export,
+)
 from paperscan.platform_tools import Tool, find_tool
 from paperscan.session import DocumentSession, SessionPage, full_photo, load_session_page, render_final, render_preview
 from paperscan.settings import AppSettings, SettingsStore, with_setting
@@ -432,9 +440,44 @@ class MainWindow(QMainWindow):
 
     def _show_page_menu(self, position: QPoint) -> None:
         """Right-click menu on a page thumbnail (the clicked page is already selected)."""
+        index = self._current
+        in_first_document = index in self._session.document_ranges()[0]
         menu = QMenu(self)
         menu.addActions(self._page_toolbar.actions_for_window)
+        menu.addSeparator()
+        entries = [
+            ("Start a new document here", self._split_document, index > 0 and not self._session.starts_document(index)),
+            ("Join with the previous document", self._join_document, not in_first_document),
+            ("Split at pauses between photos", self._split_at_pauses, len(self._session) > 1),
+        ]
+        for text, handler, enabled in entries:
+            action = menu.addAction(text)
+            action.triggered.connect(handler)
+            action.setEnabled(enabled)
         menu.exec(position)
+
+    def _split_document(self) -> None:
+        """Make the current page the first page of a new document."""
+        self._session.split_before(self._current)
+        self._documents_changed()
+
+    def _join_document(self) -> None:
+        """Merge the current page's document into the one before it."""
+        self._session.join_with_previous(self._current)
+        self._documents_changed()
+
+    def _split_at_pauses(self) -> None:
+        """Start a new document wherever photos were taken minutes apart."""
+        count = self._session.split_at_pauses(SERIES_GAP)
+        minutes = int(SERIES_GAP.total_seconds() // 60)
+        self._documents_changed()
+        self._set_status(f"{count} document(s) · split where photos are more than {minutes} minutes apart")
+
+    def _documents_changed(self) -> None:
+        """Show the new split in the strip and the workflow panel."""
+        self._refresh_strip()
+        count = len(self._session.document_ranges())
+        self._set_status(f"{count} documents · each becomes its own PDF" if count > 1 else "One document")
 
     def _rotate(self, *, clockwise: bool) -> None:
         """Turn the current page."""
@@ -568,64 +611,92 @@ class MainWindow(QMainWindow):
             self._strip.set_thumbnail(index, image_to_pixmap(image))
 
     def _refresh_strip(self) -> None:
-        """Match the strip to the session's page count."""
+        """Match the strip to the session's pages and documents."""
         self._strip.set_page_count(len(self._session))
+        self._strip.set_documents(self._session.document_ranges())
         self._update_actions()
 
     # --- Export ---------------------------------------------------------------------------------
 
     def _export(self) -> None:
-        """Process all pages in the background, then let the user review the result."""
+        """Process every document in the background, then let the user review them together."""
         if not len(self._session):
             return
-        pages, settings = self._session.scan_pages(), self._settings
+        documents, settings = self._session.document_pages(), self._settings
         self._cancel_export.clear()
         self._cancel.show()
-        self._run("Creating PDF …", lambda progress: prepare_export(pages, settings, progress, self._cancel_export), self._review_export)
+        message = "Creating PDF …" if len(documents) == 1 else f"Creating {len(documents)} PDFs …"
+        self._run(message, lambda progress: prepare_documents(documents, settings, progress, self._cancel_export), self._review_export)
 
-    def _review_export(self, draft: ExportDraft) -> None:
-        """Show the suggestion (AI on request) and write the PDF once confirmed."""
+    def _review_export(self, drafts: list[ExportDraft]) -> None:
+        """Show every document's suggestion (AI on request) and write the PDFs once confirmed."""
         self._cancel.hide()
         settings = self._settings
         providers = available_providers(settings.ai.provider)
         preferred = settings.ai.provider.provider if settings.ai.provider.enabled else next(iter(providers), AnalysisProvider.NONE)
         dialog = ExportDialog(
-            suggested_choice(draft, settings.file_date_style),
+            [self._document_review(draft) for draft in drafts],
             Path(settings.output_dir).expanduser(),
             open_after=settings.open_after_export,
             style=settings.file_date_style,
             providers=providers,
             preferred=preferred,
             phone_photo_count=len(self._session.phone_photos()),
-            analysed_by=settings.ai.provider.provider if settings.ai.provider.enabled and draft.analysis.title else None,
             parent=self,
         )
-        current = [draft]
+        current = list(drafts)
 
-        def ask_ai(provider: AnalysisProvider) -> None:
+        def ask_ai(index: int, provider: AnalysisProvider) -> None:
             ai_settings = with_setting(settings, "ai.provider.provider", provider)
 
             def reanalysed(new_draft: ExportDraft) -> None:
-                current[0] = new_draft
-                dialog.apply_suggestion(suggested_choice(new_draft, settings.file_date_style))
+                current[index] = new_draft
+                dialog.apply_suggestion(index, suggested_choice(new_draft, settings.file_date_style))
 
-            start_task(lambda _progress: reanalyse(current[0], ai_settings), reanalysed, lambda error: dialog.ai_failed(str(error)))
+            start_task(
+                lambda _progress: reanalyse(current[index], ai_settings),
+                reanalysed,
+                lambda error: dialog.ai_failed(index, str(error)),
+            )
 
         dialog.ai_requested.connect(ask_ai)
         if not dialog.exec():
             self._set_status("Export cancelled")
             return
-        try:
-            target = write_export(current[0], dialog.choice(), dialog.output_dir())
-        except OSError as exc:
-            self._show_error(str(exc))
-            return
-        self._set_status(f"Saved: {target}")
+        saved = self._write_documents(current, dialog.choices(), dialog.output_dir(), open_after=dialog.open_after())
         self._remember_export_choices(dialog.output_dir(), open_after=dialog.open_after())
-        if dialog.open_after():
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
         if dialog.delete_from_phone():
-            self._delete_phone_photos(self._session.phone_photos())
+            ranges = self._session.document_ranges()
+            self._delete_phone_photos(self._session.phone_photos(page for index in saved for page in ranges[index]))
+
+    def _document_review(self, draft: ExportDraft) -> DocumentReview:
+        """Return what the save dialog shows for one prepared document."""
+        settings = self._settings
+        analysed = settings.ai.provider.enabled and bool(draft.analysis.title)
+        return DocumentReview(
+            suggestion=suggested_choice(draft, settings.file_date_style),
+            page_count=len(draft.pages),
+            preview_jpeg=draft.ai_images[0] if draft.ai_images else b"",
+            analysed_by=settings.ai.provider.provider if analysed else None,
+        )
+
+    def _write_documents(self, drafts: list[ExportDraft], choices: list[ExportChoice], output_dir: Path, *, open_after: bool) -> list[int]:
+        """Write each confirmed document and return the indices of those saved (stops at the first failure)."""
+        saved: list[int] = []
+        targets: list[Path] = []
+        for index, (draft, choice) in enumerate(zip(drafts, choices, strict=True)):
+            try:
+                targets.append(write_export(draft, choice, output_dir))
+            except OSError as exc:
+                self._show_error(f"Saving {choice.file_name} failed: {exc}")
+                break
+            saved.append(index)
+        if targets:
+            self._set_status(f"Saved: {targets[0]}" if len(targets) == 1 else f"Saved {len(targets)} PDFs in {output_dir}")
+        if open_after:
+            for target in targets:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+        return saved
 
     def _remember_export_choices(self, output_dir: Path, *, open_after: bool) -> None:
         """Keep the folder and "open after saving" chosen in the save dialog for next time."""
@@ -784,7 +855,7 @@ class MainWindow(QMainWindow):
         self._actions["compare"].setEnabled(has_page)
         self._page_toolbar.set_page_actions_enabled(has_page)
         self._actions["export"].setEnabled(idle and len(self._session) > 0)
-        self._workflow.show_state(page_count=len(self._session), busy=not idle)
+        self._workflow.show_state(page_count=len(self._session), document_count=len(self._session.document_ranges()), busy=not idle)
         for key in ("phone", "files", "folder", "new"):
             self._actions[key].setEnabled(idle)
 
