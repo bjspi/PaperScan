@@ -153,7 +153,7 @@ Running it again is safe; `git pull` and a rerun update the app.
 
 ```bash
 pipx install "paperscan[all] @ git+https://github.com/bjspi/PaperScan"
-pipx install "paperscan[all] @ git+https://github.com/bjspi/PaperScan@v0.3.0"   # a fixed release
+pipx install "paperscan[all] @ git+https://github.com/bjspi/PaperScan@v0.3.1"   # a fixed release
 paperscan setup      # Tesseract (+ languages), cjpegli, adb
 paperscan doctor     # tools, model and connected phone
 ```

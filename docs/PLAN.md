@@ -138,7 +138,7 @@ paperscan doctor
 | 2 | Application: settings store, two-phase pipeline, session, comparison | done |
 | 3 | CLI with banner: scan, compare, phone, setup, doctor, model, config | done |
 | 4 | GUI: main window, corner editor (edges + magnifier), filter/output/workflow panels, phone, compare, save and settings dialogs, theme, icons | done |
-| 5 | Quality gate: ruff, mypy, 86 tests (domain, settings, workflow, phone connection, multiple documents, GUI) | done |
+| 5 | Quality gate: ruff, mypy, 87 tests (domain, settings, workflow, phone connection, multiple documents, GUI) | done |
 | 6 | Docs: README with screenshots, ARCHITECTURE, PLAN | done |
 | 7 | Setup assistant (`setup`, Tools page) and installers (`install.ps1`, `install.sh`) | done (Windows tested) |
 | 8 | Filter comparison: `compare`, `--variant/--set/--auto-filter`, GUI dialog, AI rating | done |
