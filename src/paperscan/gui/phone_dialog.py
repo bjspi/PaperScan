@@ -122,7 +122,9 @@ class PhoneDialog(QDialog):
             item = QListWidgetItem(QIcon(placeholder), f"{photo.modified:%d.%m.%Y %H:%M}\n{photo.size / BYTES_PER_MB:.1f} MB")
             item.setData(Qt.ItemDataRole.UserRole, photo)
             item.setToolTip(photo.name)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            # Not user-checkable: the box only shows the state, a click anywhere on the tile toggles it
+            # once (in _toggle); with Qt toggling the box as well, a click on it would cancel itself.
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Unchecked)
             grid.addItem(item)
         grid.itemClicked.connect(self._toggle)

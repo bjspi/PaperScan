@@ -131,7 +131,7 @@ class SettingsStore:
             return AppSettings()
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:  # e.g. saved as UTF-16 by an editor
             log.warning("Unreadable settings %s (%s); using defaults", self.path, exc)
             self._set_aside_corrupt_file()
             return AppSettings()

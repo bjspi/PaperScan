@@ -54,15 +54,28 @@ class PdfMetadata:
 
 
 def build_pdf(pages: list[PdfPage], metadata: PdfMetadata, target: Path) -> None:
-    """Write ``pages`` as one PDF to ``target`` (parent directories are created)."""
-    document = pymupdf.open()
-    for page in pages:
-        _add_page(document, page)
-    document.subset_fonts()
-    document.set_metadata(_metadata_dict(metadata))
+    """Write ``pages`` as one PDF to ``target`` (parent directories are created).
+
+    The PDF is built in memory and written by Python, so a failing disk raises
+    :class:`OSError` (PyMuPDF reports its own errors) and leaves no broken file behind.
+    """
+    data = _pdf_bytes(pages, metadata)
     target.parent.mkdir(parents=True, exist_ok=True)
-    document.save(str(target), **SAVE_OPTIONS)
-    document.close()
+    try:
+        target.write_bytes(data)
+    except OSError:
+        target.unlink(missing_ok=True)
+        raise
+
+
+def _pdf_bytes(pages: list[PdfPage], metadata: PdfMetadata) -> bytes:
+    """Return the finished PDF."""
+    with pymupdf.open() as document:
+        for page in pages:
+            _add_page(document, page)
+        document.subset_fonts()
+        document.set_metadata(_metadata_dict(metadata))
+        return document.tobytes(**SAVE_OPTIONS)
 
 
 def _add_page(document: pymupdf.Document, page: PdfPage) -> None:

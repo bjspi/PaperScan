@@ -38,6 +38,8 @@ MEDIA_STORE_IMAGES = "content://media/external/images/media"
 PHOTO_HEAD_BYTES = 131072
 #: Modification time in local copy names (keeps photos with equal names apart).
 LOCAL_NAME_TIME_FORMAT = "%Y%m%d-%H%M%S"
+#: Extended regular expression (case-insensitive) for the names of photo files on the phone.
+PHOTO_NAME_PATTERN = r"\.(" + "|".join(extension.lstrip(".") for extension in PHOTO_EXTENSIONS) + r")$"
 #: Device state reported by ``adb devices`` for usable devices.
 DEVICE_READY_STATE = "device"
 #: Timeout for connecting or pairing over Wi-Fi, in seconds.
@@ -159,7 +161,9 @@ class AdbClient:
 
     def list_photos(self, camera_dir: str = DEFAULT_CAMERA_DIR, limit: int = 50) -> list[RemotePhoto]:
         """Return the newest photos in ``camera_dir``, newest first."""
-        script = f"cd {shlex.quote(camera_dir)} && ls -t | head -n {int(limit) * 2} | while read f; do stat -c '%Y %s %n' \"$f\"; done"
+        # Photos are picked out before the list is cut, so new videos cannot crowd them out.
+        newest_photos = f"ls -t | grep -iE {shlex.quote(PHOTO_NAME_PATTERN)} | head -n {int(limit)}"
+        script = f"cd {shlex.quote(camera_dir)} && {newest_photos} | while read f; do stat -c '%Y %s %n' \"$f\"; done"
         output = self._run(["shell", script])
         photos = [photo for line in output.splitlines() if (photo := _parse_stat_line(line, camera_dir))]
         log.info("Listed %d photo(s) in %s", min(len(photos), limit), camera_dir)

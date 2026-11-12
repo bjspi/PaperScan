@@ -126,6 +126,12 @@ def test_pdf_text_layer_keeps_characters_beyond_latin_1(tmp_path: Path, document
         assert document[0].get_text().split("\n")[:3] == list(lines)
 
 
+def test_settings_saved_in_another_encoding_fall_back_to_defaults(tmp_path: Path) -> None:
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"jpeg": {"quality": 77}}), encoding="utf-16")
+    assert SettingsStore(config).load() == AppSettings()
+
+
 def test_settings_roundtrip_and_defaults_for_invalid_values(tmp_path: Path) -> None:
     store = SettingsStore(tmp_path / "config.json")
     changed = with_setting(AppSettings(), "ai.provider.provider", AnalysisProvider.CLAUDE_CLI)

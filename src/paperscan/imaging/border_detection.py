@@ -109,7 +109,7 @@ def detect_by_model(rgb: np.ndarray, model_path: Path) -> Detection | None:
     try:
         interpreter = _load_interpreter(model_path)
         corners, confidence = _run_model(interpreter, rgb)
-    except (RuntimeError, ValueError, OSError) as exc:
+    except (RuntimeError, ValueError, OSError, KeyError) as exc:  # KeyError: a model with other output names
         log.warning("Border model failed: %s", exc)
         return None
     height, width = rgb.shape[:2]

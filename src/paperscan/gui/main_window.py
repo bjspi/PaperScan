@@ -122,6 +122,25 @@ class _ExportJob:
 
 
 @dataclass(frozen=True)
+class _SaveRequest:
+    """An export confirmed in the save dialog."""
+
+    job: _ExportJob
+    output_dir: Path
+    open_after: bool
+    delete_from_phone: bool
+
+
+@dataclass(frozen=True)
+class _SaveOutcome:
+    """The PDFs written for a save request; saving stops at the first failure."""
+
+    #: One file per saved document, in document order (the first ``len(targets)`` documents).
+    targets: list[Path]
+    error: str = ""
+
+
+@dataclass(frozen=True)
 class _PreviewResult:
     """A rendered preview tagged with the request it answers."""
 
@@ -400,6 +419,7 @@ class MainWindow(QMainWindow):
 
     def _select_page(self, index: int) -> None:
         """Show page ``index`` in the editor, filter panel and preview."""
+        self._preview_generation += 1  # previews still being rendered belong to the page shown before
         if not 0 <= index < len(self._session):
             self._current = -1
             self._editor.clear_page()
@@ -413,13 +433,15 @@ class MainWindow(QMainWindow):
         self._filters.show_settings(entry.page.edit.filter, entry.own_filter)
         self._update_actions()
         self._schedule_preview()
-        start_task(lambda _progress: full_photo(entry), lambda photo: self._detail_ready(index, photo), self._task_failed)
+        source = entry.page.source
+        start_task(lambda _progress: full_photo(entry), lambda photo: self._detail_ready(source, photo), self._task_failed)
 
-    def _detail_ready(self, index: int, photo: object) -> None:
-        """Give the loupe the full-resolution photo if the page is still shown."""
-        if index == self._current:
-            entry = self._session.page(index)
-            self._editor.set_detail_image(photo, 1 / entry.preview_scale)  # type: ignore[arg-type]
+    def _detail_ready(self, source: Path, photo: object) -> None:
+        """Give the loupe the full-resolution photo if its page is still shown (pages may have moved)."""
+        if self._current < 0 or self._session.page(self._current).page.source != source:
+            return
+        entry = self._session.page(self._current)
+        self._editor.set_detail_image(photo, 1 / entry.preview_scale)  # type: ignore[arg-type]
 
     def _quad_edited(self, preview_quad: Quad) -> None:
         """Store the dragged outline in source coordinates."""
@@ -557,12 +579,10 @@ class MainWindow(QMainWindow):
         dialog.deleteLater()
         if not accepted:
             return
-        self._session.set_filter(self._current, chosen.settings, only_this_page=False)
+        # Same path as a document-wide edit in the filter panel: the current page follows the shared filter again.
+        self._filter_edited(chosen.settings, only_this_page=False)
         self._filters.show_settings(chosen.settings, own_filter=False)
         self._set_status(f"Filter variant {chosen.number} ({chosen.name}) applied to all pages")
-        self._schedule_preview()
-        for index in range(len(self._session)):
-            self._render_thumbnail(index)
 
     # --- Previews -------------------------------------------------------------------------------
 
@@ -679,12 +699,16 @@ class MainWindow(QMainWindow):
         if not dialog.exec():
             self._set_status("Export cancelled")
             return
-        saved = self._write_documents(current, dialog.choices(), dialog.output_dir(), open_after=dialog.open_after())
-        if len(saved) == len(job.documents):
-            self._saved_documents = job.documents
-        self._remember_export_choices(dialog.output_dir(), open_after=dialog.open_after())
-        if dialog.delete_from_phone():
-            self._delete_phone_photos(_photos_of_saved_documents(job.phone_photos, saved))
+        request = _SaveRequest(
+            job=job, output_dir=dialog.output_dir(), open_after=dialog.open_after(), delete_from_phone=dialog.delete_from_phone()
+        )
+        confirmed, choices = list(current), dialog.choices()
+        self._remember_export_choices(request.output_dir, open_after=request.open_after)
+        self._run(
+            "Saving PDF …" if len(confirmed) == 1 else f"Saving {len(confirmed)} PDFs …",
+            lambda progress: _write_documents(confirmed, choices, request.output_dir, progress),
+            lambda outcome: self._documents_saved(request, outcome),
+        )
 
     def _document_review(self, draft: ExportDraft) -> DocumentReview:
         """Return what the save dialog shows for one prepared document."""
@@ -697,23 +721,20 @@ class MainWindow(QMainWindow):
             analysed_by=settings.ai.provider.provider if analysed else None,
         )
 
-    def _write_documents(self, drafts: list[ExportDraft], choices: list[ExportChoice], output_dir: Path, *, open_after: bool) -> list[int]:
-        """Write each confirmed document and return the indices of those saved (stops at the first failure)."""
-        saved: list[int] = []
-        targets: list[Path] = []
-        for index, (draft, choice) in enumerate(zip(drafts, choices, strict=True)):
-            try:
-                targets.append(write_export(draft, choice, output_dir))
-            except OSError as exc:
-                self._show_error(f"Saving {choice.file_name} failed: {exc}")
-                break
-            saved.append(index)
+    def _documents_saved(self, request: _SaveRequest, outcome: _SaveOutcome) -> None:
+        """Report the written PDFs, open them if wanted and offer to delete their phone photos."""
+        targets = outcome.targets
+        if outcome.error:
+            self._show_error(outcome.error)
         if targets:
-            self._set_status(f"Saved: {targets[0]}" if len(targets) == 1 else f"Saved {len(targets)} PDFs in {output_dir}")
-        if open_after:
+            self._set_status(f"Saved: {targets[0]}" if len(targets) == 1 else f"Saved {len(targets)} PDFs in {request.output_dir}")
+        if request.open_after:
             for target in targets:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
-        return saved
+        if len(targets) == len(request.job.documents):
+            self._saved_documents = request.job.documents
+        if request.delete_from_phone:
+            self._delete_phone_photos(_photos_of_saved_documents(request.job.phone_photos, list(range(len(targets)))))
 
     def _remember_export_choices(self, output_dir: Path, *, open_after: bool) -> None:
         """Keep the folder and "open after saving" chosen in the save dialog for next time."""
@@ -892,6 +913,20 @@ class MainWindow(QMainWindow):
             return
         self._cancel_export.set()
         super().closeEvent(event)
+
+
+def _write_documents(
+    drafts: list[ExportDraft], choices: list[ExportChoice], output_dir: Path, progress: Callable[[str, float], None]
+) -> _SaveOutcome:
+    """Write the confirmed documents one after another (runs in the background)."""
+    targets: list[Path] = []
+    for number, (draft, choice) in enumerate(zip(drafts, choices, strict=True)):
+        progress(f"Saving {choice.file_name}", number / len(drafts))
+        try:
+            targets.append(write_export(draft, choice, output_dir))
+        except OSError as exc:
+            return _SaveOutcome(targets=targets, error=f"Saving {choice.file_name} failed: {exc}")
+    return _SaveOutcome(targets=targets)
 
 
 def _photos_of_saved_documents(phone_photos: list[list[RemotePhoto]], saved: list[int]) -> list[RemotePhoto]:
