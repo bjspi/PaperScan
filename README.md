@@ -285,3 +285,32 @@ macOS and Linux. If PaperScan saves you a trip to the scanner, a ⭐ helps other
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
+
+### Third-party licenses
+
+PaperScan's own code is MIT. Its releases contain only that code: pip installs the libraries
+below, and the setup assistant downloads the external tools from their official sources on your
+machine. Each keeps its own license.
+
+| Component | Used for | License |
+| --- | --- | --- |
+| [PyMuPDF](https://github.com/pymupdf/PyMuPDF) | PDF with invisible text layer | AGPL-3.0 or commercial (Artifex) |
+| [PySide6 / Qt](https://doc.qt.io/qtforpython-6/) | GUI | LGPL-3.0 |
+| [OpenCV](https://opencv.org/) (`opencv-python`) | Page detection, perspective, filters | Apache-2.0 |
+| [NumPy](https://numpy.org/) | Image arrays | BSD-3-Clause |
+| [Pillow](https://python-pillow.org/) | Photo loading, EXIF, JPEG fallback | MIT-CMU |
+| [rich-click](https://github.com/ewels/rich-click) | Command line | MIT |
+| [LiteRT](https://ai.google.dev/edge/litert) (`ai-edge-litert`, extra `ml`) | Neural border detection | Apache-2.0 |
+| [openai](https://github.com/openai/openai-python) (extra `openai`) | OpenAI backend | Apache-2.0 |
+| [pillow-heif](https://github.com/bigcat88/pillow_heif) (extra `heic`) | iPhone photos | BSD-3-Clause |
+| [Tesseract](https://github.com/tesseract-ocr/tesseract) and its language data | Text recognition | Apache-2.0 |
+| [jpegli / libjxl](https://github.com/libjxl/libjxl) (`cjpegli`) | JPEG encoding | BSD-3-Clause |
+| [Android platform-tools](https://developer.android.com/tools/releases/platform-tools) (`adb`) | Phone import | Android SDK terms (Google) |
+
+**PyMuPDF is AGPL-3.0.** Using PaperScan as it is published here is fine. If you redistribute
+PaperScan together with PyMuPDF, for example in a bundled build, or build a closed-source product
+on it, the AGPL applies to that combination, unless you hold a commercial PyMuPDF license from
+Artifex.
+
+The optional page corner model is not part of PaperScan. You import a compatible TFLite model
+yourself, and its license is yours to check.
