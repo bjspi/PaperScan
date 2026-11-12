@@ -1,9 +1,9 @@
 <p align="center">
-    <img src="docs/assets/icon.png" alt="PaperScan" width="128" />
+    <img src="docs/assets/banner.png" alt="PaperScan" width="720" />
 </p>
 
-<h1 align="center">PaperScan</h1>
 <h3 align="center">Phone photos of paper → clean, searchable, well-named PDFs</h3>
+<p align="center"><i>Desktop app and CLI · adaptive shadow removal · OCR text layer · AI file naming · runs locally</i></p>
 
 ---
 
@@ -11,8 +11,13 @@
 <a href="https://github.com/bjspi/PaperScan/actions/workflows/ci.yml">
     <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/bjspi/PaperScan/ci.yml?branch=main&style=flat-square&label=CI&logo=github" />
 </a>
+<a href="https://github.com/bjspi/PaperScan/commits/main">
+    <img alt="Last commit" src="https://img.shields.io/github/last-commit/bjspi/PaperScan?style=flat-square&color=blue" />
+</a>
 <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white" />
 <img alt="PySide6" src="https://img.shields.io/badge/GUI-PySide6-41CD52?style=flat-square&logo=qt&logoColor=white" />
+<img alt="OpenCV" src="https://img.shields.io/badge/vision-OpenCV-5C3EE8?style=flat-square&logo=opencv&logoColor=white" />
+<img alt="Tesseract OCR" src="https://img.shields.io/badge/OCR-Tesseract-1F6FEB?style=flat-square" />
 <a href="LICENSE">
     <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green?style=flat-square" />
 </a>
@@ -41,6 +46,8 @@
   &nbsp;·&nbsp;
   <a href="#%EF%B8%8F-development"><b>Development</b></a>
 </p>
+
+---
 
 Plug in your phone, pick the photos of that five-page heating bill, and get **one** clean PDF:
 white paper instead of shadows, crisp text, a selectable text layer, and a file name like
@@ -78,24 +85,38 @@ document itself. No scanner app, no cloud scanner service, no copying files arou
 ## 📸 Screenshots
 
 <p align="center">
+  <a href="docs/assets/main-window.png" target="_blank">
     <img src="docs/assets/main-window.png" alt="Main window: page strip, corner editor with page actions, live result, filter, output and workflow panels" width="900" />
+  </a>
+  <br />
+  <sub><b>🖥️ Main window</b> — Drag corners or whole edges on the left, see the export-quality page on the right, tune filter and output on the side, finish with <b>Create PDF</b>.</sub>
 </p>
-<p align="center"><i>Drag corners or edges on the left, see the export-quality page on the right, tune filter and output on the side, finish with <b>Create PDF</b>.</i></p>
 
 <p align="center">
+  <a href="docs/assets/compare-filters.png" target="_blank">
     <img src="docs/assets/compare-filters.png" alt="Filter comparison with numbered variants" width="900" />
+  </a>
+  <br />
+  <sub><b>🔍 Compare filters</b> (Ctrl+K) — Numbered variants side by side, click to enlarge, <i>Let AI choose</i>, apply to the whole document.</sub>
 </p>
-<p align="center"><i>Compare filters (Ctrl+K): numbered variants, click to enlarge, “Let AI choose”, apply to the whole document.</i></p>
 
 <table>
-<tr>
-<td width="50%"><img src="docs/assets/save-dialog.png" alt="Save dialog with AI suggestion and editable file name" /></td>
-<td width="50%"><img src="docs/assets/settings.png" alt="Settings window" /></td>
-</tr>
-<tr>
-<td align="center"><i>Review the AI's title, date and summary; the file name is editable.</i></td>
-<td align="center"><i>Settings in the WhisperTyper style, shared with the CLI.</i></td>
-</tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <a href="docs/assets/save-dialog.png" target="_blank">
+        <img src="docs/assets/save-dialog.png" alt="Save dialog with AI suggestion and editable file name" />
+      </a>
+      <br />
+      <sub><b>🤖 Save dialog</b> — Review the AI's title, date and summary; the file name stays editable and the folder is remembered.</sub>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <a href="docs/assets/settings.png" target="_blank">
+        <img src="docs/assets/settings.png" alt="Settings window" />
+      </a>
+      <br />
+      <sub><b>⚙️ Settings</b> — One window with a sidebar for phone, image &amp; JPEG, text recognition, AI and tools — shared with the CLI.</sub>
+    </td>
+  </tr>
 </table>
 
 ## ⬇️ Installation
@@ -250,6 +271,12 @@ The code is layered: `gui/` and `cli/` (presentation) → `pipeline`, `session`,
 `settings` (application) → `imaging/`, `ocr/`, `export/`, `analysis/`, `capture/` (domain) →
 `platform_tools`, `tool_setup`, `app_paths`, `app_logging` (platform). Tests need no external
 tool, network or personal data. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## 🤝 Contributing
+
+Bug reports, ideas and pull requests are welcome. Please run the checks from
+[Development](#%EF%B8%8F-development) before opening a pull request — CI runs the same on Windows,
+macOS and Linux. If PaperScan saves you a trip to the scanner, a ⭐ helps others find it.
 
 ## 📄 License
 
