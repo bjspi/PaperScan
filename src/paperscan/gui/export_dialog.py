@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QSize, Signal
+from PySide6.QtCore import QDate, QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
@@ -290,6 +290,9 @@ class ExportDialog(QDialog):
         document_list = QListWidget()
         document_list.setFixedWidth(DOCUMENT_LIST_WIDTH)
         document_list.setIconSize(DOCUMENT_ICON_SIZE)
+        # Long titles wrap onto further lines instead of widening the list behind a scroll bar.
+        document_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        document_list.setWordWrap(True)
         for number, (review, form) in enumerate(zip(documents, self._forms, strict=True), start=1):
             stack.addWidget(form)
             item = QListWidgetItem(_document_icon(review.preview_jpeg), "")
@@ -346,3 +349,4 @@ def _label(item: QListWidgetItem, number: int, title: str, page_count: int) -> N
     """Show the document number, its title and page count in the list."""
     pages = f"{page_count} page{'s' if page_count != 1 else ''}"
     item.setText(f"Document {number} · {pages}\n{title.strip() or '—'}")
+    item.setToolTip(title.strip())

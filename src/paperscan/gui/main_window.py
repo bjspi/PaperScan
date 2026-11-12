@@ -899,8 +899,11 @@ class MainWindow(QMainWindow):
         """Enable actions that make sense right now."""
         has_page = self._current >= 0
         idle = self._busy_jobs == 0
-        self._actions["compare"].setEnabled(has_page)
-        self._page_toolbar.set_page_actions_enabled(has_page)
+        self._actions["compare"].setEnabled(has_page and idle)
+        self._page_toolbar.set_page_actions_enabled(has_page and idle)
+        # While photos load or PDFs are made, the pages are fixed: edits would not reach the PDFs.
+        for panel in (self._strip, self._editor, self._filters, self._output):
+            panel.setEnabled(idle)
         self._actions["export"].setEnabled(idle and len(self._session) > 0)
         self._workflow.show_state(page_count=len(self._session), document_count=len(self._session.document_ranges()), busy=not idle)
         for key in ("phone", "files", "folder", "new"):
