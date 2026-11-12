@@ -32,14 +32,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from paperscan.analysis.vision import AnalysisProvider, available_providers
+from paperscan.analysis.vision import PROVIDER_LABELS, AnalysisProvider, available_providers
 from paperscan.app_paths import APP_NAME, LOG_FILE
 from paperscan.capture.adb_import import AdbError, RemotePhoto
 from paperscan.capture.photo_files import SERIES_GAP, is_photo, photos_in_folder
 from paperscan.comparison import rate_renders, render_page_variants
 from paperscan.gui.compare_dialog import CompareDialog
 from paperscan.gui.corner_editor import CornerEditor
-from paperscan.gui.export_dialog import PROVIDER_LABELS, DocumentReview, ExportDialog
+from paperscan.gui.export_dialog import DocumentReview, ExportDialog
 from paperscan.gui.filter_panel import FilterPanel
 from paperscan.gui.image_view import ImageView
 from paperscan.gui.images import image_to_pixmap, to_qimage

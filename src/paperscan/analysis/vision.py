@@ -49,6 +49,14 @@ class AnalysisProvider(StrEnum):
     CODEX_CLI = "codex_cli"
 
 
+#: Provider names shown to the user.
+PROVIDER_LABELS: dict[AnalysisProvider, str] = {
+    AnalysisProvider.CLAUDE_CLI: "Claude Code",
+    AnalysisProvider.CODEX_CLI: "Codex",
+    AnalysisProvider.OPENAI: "OpenAI API",
+}
+
+
 class AnalysisError(RuntimeError):
     """Raised when the backend fails or returns no usable JSON."""
 

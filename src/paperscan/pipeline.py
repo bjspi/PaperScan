@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from paperscan.analysis.document_analysis import AnalysisRequest, DocumentAnalysis, analyze_document
+from paperscan.analysis.vision import PROVIDER_LABELS
 from paperscan.capture.photo_files import capture_time, load_photo
 from paperscan.export.jpeg_encoding import encode_jpeg
 from paperscan.export.naming import FALLBACK_TITLE, FileDateStyle, clean_pdf_name, pdf_file_name, unique_path
@@ -155,7 +156,7 @@ def prepare_export(
         rendered = render_page(load_photo(page.source), page.edit, settings.max_edge or None)
         jpeg = encode_jpeg(rendered, settings.jpeg)
         ai_images.append(ai_image(rendered, settings))
-        tracker.step(f"Recognising text on page {number}/{len(pages)}")
+        tracker.step(f"Recognising text with Tesseract (page {number}/{len(pages)})")
         ocr = recognize(rendered, settings.ocr.languages, settings.ocr.tesseract_path) if settings.ocr.enabled else None
         log.info(
             "Page %d/%d: %dx%d px, %d KB JPEG, %s",
@@ -168,7 +169,7 @@ def prepare_export(
         )
         pdf_pages.append(PdfPage(jpeg=jpeg, width=rendered.shape[1], height=rendered.shape[0], ocr=ocr))
     capture_date = min(page.captured_at for page in pages).date()
-    tracker.step("Analysing the document")
+    tracker.step(_analysis_step(settings))
     analysis = _analyse(pdf_pages, ai_images, capture_date, settings)
     tracker.check_cancelled()
     pages_out = tuple(_apply_corrections(pdf_pages, analysis))
@@ -241,6 +242,14 @@ def choice_for(
 def ai_image(rendered: np.ndarray, settings: AppSettings) -> bytes:
     """Return a small JPEG of a rendered page for AI requests."""
     return encode_jpeg(limit_long_edge(rendered, settings.ai.image_edge), replace(settings.jpeg, use_jpegli=False))
+
+
+def _analysis_step(settings: AppSettings) -> str:
+    """Return the progress text of the final step, naming the AI that reads the pages."""
+    provider = settings.ai.provider
+    if not provider.enabled:
+        return "Finishing the document"
+    return f"AI vision: {PROVIDER_LABELS.get(provider.provider, 'the AI')} reads the document (title, date, text)"
 
 
 def _analyse(pdf_pages: list[PdfPage], ai_images: list[bytes], capture_date: date, settings: AppSettings) -> DocumentAnalysis:

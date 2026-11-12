@@ -31,18 +31,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from paperscan.analysis.vision import AnalysisProvider
+from paperscan.analysis.vision import PROVIDER_LABELS, AnalysisProvider
 from paperscan.export.naming import MAX_FILE_NAME_LENGTH, FileDateStyle, pdf_file_name
 from paperscan.gui.setting_rows import Card
 from paperscan.gui.toggle_switch import ToggleSwitch
 from paperscan.pipeline import ExportChoice
 
-#: Provider names shown in the AI dropdown.
-PROVIDER_LABELS: dict[AnalysisProvider, str] = {
-    AnalysisProvider.CLAUDE_CLI: "Claude Code",
-    AnalysisProvider.CODEX_CLI: "Codex",
-    AnalysisProvider.OPENAI: "OpenAI API",
-}
 ASK_AGAIN_TEXT = "✨  Ask again"
 NO_AI_HINT = "No AI available — install Claude Code or Codex, or add an OpenAI key under Settings → AI."
 SUMMARY_HEIGHT = 84
