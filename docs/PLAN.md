@@ -138,7 +138,7 @@ paperscan doctor
 | 2 | Application: settings store, two-phase pipeline, session, comparison | done |
 | 3 | CLI with banner: scan, compare, phone, setup, doctor, model, config | done |
 | 4 | GUI: main window, corner editor (edges + magnifier), filter/output/workflow panels, phone, compare, save and settings dialogs, theme, icons | done |
-| 5 | Quality gate: ruff, mypy, 79 tests (domain, settings, workflow, phone connection, multiple documents, GUI) | done |
+| 5 | Quality gate: ruff, mypy, 86 tests (domain, settings, workflow, phone connection, multiple documents, GUI) | done |
 | 6 | Docs: README with screenshots, ARCHITECTURE, PLAN | done |
 | 7 | Setup assistant (`setup`, Tools page) and installers (`install.ps1`, `install.sh`) | done (Windows tested) |
 | 8 | Filter comparison: `compare`, `--variant/--set/--auto-filter`, GUI dialog, AI rating | done |
@@ -149,6 +149,7 @@ paperscan doctor
 | 13 | Optional page-curl dewarping for bent pages and book spreads (e.g. a UVDoc/DocTr-style model, imported like the corner model). Perspective correction exists; phone cameras already correct lens distortion. | open |
 | 14 | Wi-Fi fallback for the phone (Wireless debugging, pairing, search dialog that retries) | done (0.2.0) |
 | 15 | Several documents from one import: split in the page strip, one save dialog for all PDFs | done (0.2.1) |
+| 16 | Review of the whole history by a second reviewer; confirmed everyday problems fixed (phone deletion and import, downloads, Unicode text layer, unsaved pages, background saving) | done (0.3.0) |
 
 ## 8. Risks and open points
 
