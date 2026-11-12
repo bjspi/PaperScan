@@ -156,7 +156,9 @@ def prepare_export(
         rendered = render_page(load_photo(page.source), page.edit, settings.max_edge or None)
         jpeg = encode_jpeg(rendered, settings.jpeg)
         ai_images.append(ai_image(rendered, settings))
-        tracker.step(f"Recognising text with Tesseract (page {number}/{len(pages)})")
+        tracker.step(
+            f"Recognising text with Tesseract (page {number}/{len(pages)})" if settings.ocr.enabled else f"Page {number}/{len(pages)} ready"
+        )
         ocr = recognize(rendered, settings.ocr.languages, settings.ocr.tesseract_path) if settings.ocr.enabled else None
         log.info(
             "Page %d/%d: %dx%d px, %d KB JPEG, %s",
